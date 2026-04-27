@@ -1,0 +1,178 @@
+[gd_scene load_steps=16 format=3 uid="uid://bhqmainscene01"]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/main.gd" id="2_main"]
+[ext_resource type="PackedScene" uid="uid://c8breakable01" path="res://scenes/breakable.tscn" id="3_break"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+size = Vector3(90, 1, 90)
+
+[sub_resource type="BoxShape3D" id="BoxShape_ground"]
+size = Vector3(90, 1, 90)
+
+[sub_resource type="StandardMaterial3D" id="Mat_ground"]
+albedo_color = Color(0.18, 0.32, 0.14, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(10, 6, 10)
+
+[sub_resource type="BoxShape3D" id="BoxShape_base"]
+size = Vector3(10, 6, 10)
+
+[sub_resource type="StandardMaterial3D" id="Mat_base"]
+albedo_color = Color(0.35, 0.32, 0.28, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_interior_floor"]
+size = Vector3(8, 0.2, 8)
+
+[sub_resource type="BoxShape3D" id="BoxShape_interior_floor"]
+size = Vector3(8, 0.2, 8)
+
+[sub_resource type="StandardMaterial3D" id="Mat_interior_floor"]
+albedo_color = Color(0.12, 0.2, 0.22, 1)
+roughness = 0.9
+
+[sub_resource type="SphereShape3D" id="SphereShape_command_zone"]
+radius = 13.0
+
+[sub_resource type="BoxMesh" id="BoxMesh_player"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape_player"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_player"]
+albedo_color = Color(0.15, 0.55, 0.95, 1)
+roughness = 0.4
+
+[node name="Main" type="Node3D"]
+script = ExtResource("2_main")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="CoinLabel" type="Label" parent="CanvasLayer"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 280.0
+offset_bottom = 52.0
+theme_override_colors/font_color = Color(0.95, 0.82, 0.2, 1)
+theme_override_colors/font_outline_color = Color(0.05, 0.05, 0.08, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 24
+text = "Монеты: 0"
+vertical_alignment = 1
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 24, 0)
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="."]
+collision_layer = 1
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+mesh = SubResource("BoxMesh_ground")
+surface_material_override/0 = SubResource("Mat_ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("BoxShape_ground")
+
+[node name="Base" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+collision_layer = 1
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Base"]
+mesh = SubResource("BoxMesh_base")
+surface_material_override/0 = SubResource("Mat_base")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Base"]
+shape = SubResource("BoxShape_base")
+
+[node name="InteriorFloor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+collision_layer = 1
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="InteriorFloor"]
+mesh = SubResource("BoxMesh_interior_floor")
+surface_material_override/0 = SubResource("Mat_interior_floor")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteriorFloor"]
+shape = SubResource("BoxShape_interior_floor")
+
+[node name="InteriorSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)
+
+[node name="ExteriorSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0.55, 0)
+
+[node name="BaseCommandZone" type="Area3D" parent="."]
+collision_mask = 2
+monitoring = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BaseCommandZone"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+shape = SubResource("SphereShape_command_zone")
+
+[node name="CommanderCameraRig" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CommanderCameraRig"]
+transform = Transform3D(1, 0, 0, 0, 0.766044, 0.642788, 0, -0.642788, 0.766044, 0, 28, 18)
+current = false
+fov = 52.0
+far = 200.0
+
+[node name="Tree1" parent="." instance=ExtResource("3_break")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0, 6)
+is_tree = true
+
+[node name="Tree2" parent="." instance=ExtResource("3_break")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, -7)
+is_tree = true
+
+[node name="Tree3" parent="." instance=ExtResource("3_break")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13, 0, -9)
+is_tree = true
+
+[node name="Tree4" parent="." instance=ExtResource("3_break")]
+transform = Transform3D(0.92, 0, 0.39, 0, 1, 0, -0.39, 0, 0.92, 7, 0, 11)
+is_tree = true
+
+[node name="Rock1" parent="." instance=ExtResource("3_break")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0, -11)
+is_tree = false
+
+[node name="Rock2" parent="." instance=ExtResource("3_break")]
+transform = Transform3D(0.96, 0, -0.28, 0, 1, 0, 0.28, 0, 0.96, 12, 0, 5)
+is_tree = false
+
+[node name="Rock3" parent="." instance=ExtResource("3_break")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, -5)
+is_tree = false
+
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0.55, 0)
+collision_layer = 2
+collision_mask = 33
+floor_stop_on_slope = true
+script = ExtResource("1_player")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Player"]
+mesh = SubResource("BoxMesh_player")
+surface_material_override/0 = SubResource("Mat_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("BoxShape_player")
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
+spring_length = 9.0
+collision_mask = 33
+margin = 0.08
+
+[node name="Camera3D" type="Camera3D" parent="Player/SpringArm3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+current = true
+fov = 70.0

@@ -1,0 +1,134 @@
+extends StaticBody3D
+
+## Сфера шахты: слой 32 — меч и физика (герой ходит по склону).
+const LAYER_BREAKABLE := 32
+
+const ORE_PER_HIT := 10
+const MINE_ORE_MAX := 1000
+
+const BAR_WIDTH := 2.8
+const BAR_HEIGHT := 0.22
+
+var ore_remaining: int = MINE_ORE_MAX
+
+var _bar_root: Node3D
+var _fill_mesh: MeshInstance3D
+var _fill_box: BoxMesh
+
+
+func _ready() -> void:
+	collision_layer = LAYER_BREAKABLE
+	collision_mask = 0
+	name = &"Mine"
+	add_to_group(&"mine")
+
+	var col := CollisionShape3D.new()
+	var sp := SphereShape3D.new()
+	sp.radius = 7.0
+	col.shape = sp
+	col.position = Vector3(0.0, -3.9, 0.0)
+	add_child(col)
+
+	var hill := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 7.0
+	sm.height = 14.0
+	hill.mesh = sm
+	hill.position = col.position
+	var rock := StandardMaterial3D.new()
+	rock.albedo_color = Color(0.44, 0.43, 0.42)
+	rock.roughness = 0.93
+	hill.set_surface_override_material(0, rock)
+	add_child(hill)
+
+	var entrance := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(2.4, 2.0, 0.4)
+	entrance.mesh = box
+	entrance.position = Vector3(0.0, 0.55, 3.95)
+	var dark := StandardMaterial3D.new()
+	dark.albedo_color = Color(0.02, 0.02, 0.03)
+	dark.roughness = 1.0
+	dark.metallic = 0.0
+	entrance.set_surface_override_material(0, dark)
+	add_child(entrance)
+
+	_setup_ore_bar()
+
+
+func _setup_ore_bar() -> void:
+	_bar_root = Node3D.new()
+	_bar_root.name = &"OreBar"
+	_bar_root.position = Vector3(0.0, 5.35, 0.0)
+	add_child(_bar_root)
+
+	var bg := MeshInstance3D.new()
+	var bg_box := BoxMesh.new()
+	bg_box.size = Vector3(BAR_WIDTH + 0.08, BAR_HEIGHT + 0.06, 0.06)
+	bg.mesh = bg_box
+	var bg_mat := StandardMaterial3D.new()
+	bg_mat.albedo_color = Color(0.06, 0.06, 0.08)
+	bg.set_surface_override_material(0, bg_mat)
+	_bar_root.add_child(bg)
+
+	_fill_mesh = MeshInstance3D.new()
+	_fill_box = BoxMesh.new()
+	_fill_box.size = Vector3(BAR_WIDTH, BAR_HEIGHT, 0.04)
+	_fill_mesh.mesh = _fill_box
+	var fill_mat := StandardMaterial3D.new()
+	fill_mat.albedo_color = Color(0.25, 0.82, 0.95)
+	fill_mat.emission_enabled = true
+	fill_mat.emission = Color(0.05, 0.25, 0.35)
+	fill_mat.emission_energy_multiplier = 0.35
+	fill_mat.roughness = 0.45
+	_fill_mesh.set_surface_override_material(0, fill_mat)
+	_fill_mesh.position.z = 0.035
+	_bar_root.add_child(_fill_mesh)
+
+	_refresh_mine_bar()
+
+
+func _process(_delta: float) -> void:
+	if _bar_root == null:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	_bar_root.look_at(cam.global_position, Vector3.UP)
+	_bar_root.rotate_object_local(Vector3.UP, PI)
+
+
+func get_ore_remaining() -> int:
+	return ore_remaining
+
+
+func _refresh_mine_bar() -> void:
+	if _fill_box == null:
+		return
+	var ratio := clampf(float(ore_remaining) / float(MINE_ORE_MAX), 0.0, 1.0)
+	var w := BAR_WIDTH * ratio
+	_fill_box.size = Vector3(maxf(w, 0.04), BAR_HEIGHT, 0.04)
+	_fill_mesh.position.x = -BAR_WIDTH * 0.5 + _fill_box.size.x * 0.5
+
+
+func try_extract_worker_batch(max_amount: int) -> int:
+	if max_amount <= 0 or ore_remaining <= 0:
+		return 0
+	var take: int = mini(max_amount, ore_remaining)
+	ore_remaining -= take
+	_refresh_mine_bar()
+	return take
+
+
+func apply_sword_hit(_damage: int = 0) -> void:
+	if ore_remaining <= 0:
+		return
+	var take: int = mini(ORE_PER_HIT, ore_remaining)
+	ore_remaining -= take
+	_refresh_mine_bar()
+	if take > 0:
+		GameState.add_ore(take)
+
+
+func get_work_anchor_global() -> Vector3:
+	return global_transform * Vector3(0.0, 0.55, 3.85)

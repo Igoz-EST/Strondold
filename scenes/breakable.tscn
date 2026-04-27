@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://c8breakable01"]
+
+[ext_resource type="Script" path="res://scripts/breakable.gd" id="1_script"]
+
+[node name="Breakable" type="StaticBody3D"]
+script = ExtResource("1_script")

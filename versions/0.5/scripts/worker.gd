@@ -1,0 +1,446 @@
+extends CharacterBody3D
+
+const _HumanoidAvatarBuilder := preload("res://scripts/humanoid_avatar_builder.gd")
+
+## Половина скорости героя (12 → 6).
+const SPEED := 6.0
+const GRAVITY := 30.0
+const MINE_REACH := 6.0
+const BASE_REACH := 4.2
+const CARRY_CAP := 50
+
+const MINE_HIT_INTERVAL := 0.55
+const SWING_OUT := 0.22
+const SWING_BACK := 0.18
+
+const WORKER_MAX_HP := 100
+const AVATAR_SCALE := 0.88
+const DEFAULT_MASK := 33
+const MINING_MASK := 1
+
+## Застрял: хочет идти к цели, но почти не смещается по горизонтали.
+const STUCK_TIME := 0.55
+const STUCK_MOVE_EPS := 0.028
+const STUCK_INTENT_MIN := 2.0
+const UNSTUCK_JUMP_COUNT := 4
+const UNSTUCK_JUMP_COOLDOWN := 0.42
+## Высота прыжка при от unstuck (выше — сильнее выпрыгивает).
+const UNSTUCK_JUMP_HEIGHT := 1.12
+const UNSTUCK_JUMP_VEL := sqrt(2.0 * GRAVITY * UNSTUCK_JUMP_HEIGHT)
+## Во время прыжковой фазы идёт вперёд к цели (и в воздухе тоже).
+const UNSTUCK_JUMP_FORWARD_SPEED := SPEED * 0.75
+const UNSTUCK_SIDE_TIME := 1.05
+const UNSTUCK_SIDE_SPEED_MUL := 0.85
+
+enum { GO_MINE, MINING, GO_BASE, UNLOAD, IDLE, DEAD }
+enum _Unstuck { NONE, JUMP_BURST, SIDE_STEP }
+
+var _state: int = GO_MINE
+var _carry: int = 0
+var _target_mine: Node = null
+var _deposit_global: Vector3 = Vector3.ZERO
+
+var hp: int = WORKER_MAX_HP
+
+var _pickaxe_pivot: Node3D
+var _swing_elapsed := 0.0
+var _swinging := false
+var _strike_applied := false
+var _cooldown := 0.0
+
+var _hp_bar_fill: MeshInstance3D
+var _hp_fill_box: BoxMesh
+
+var _stuck_accum := 0.0
+var _unstuck: int = _Unstuck.NONE
+var _jumps_done := 0
+var _jump_cd := 0.0
+var _side_time := 0.0
+var _side_dir_xz := Vector2.ZERO
+
+var _duel_enemy: CharacterBody3D = null
+
+@onready var _avatar_root: Node3D = $AvatarRoot
+
+
+func setup(deposit_world: Vector3) -> void:
+	_deposit_global = deposit_world
+
+
+func _ready() -> void:
+	add_to_group(&"worker")
+	collision_layer = 32
+	collision_mask = DEFAULT_MASK
+	_HumanoidAvatarBuilder.build(
+		_avatar_root,
+		Color(0.92, 0.78, 0.12),
+		true,
+		AVATAR_SCALE
+	)
+	_build_pickaxe()
+	_setup_hp_bar()
+
+
+func is_alive_for_combat() -> bool:
+	return _state != DEAD and hp > 0
+
+
+func can_accept_duel_from(enemy: Node) -> bool:
+	if not (enemy is CharacterBody3D):
+		return false
+	var e := enemy as CharacterBody3D
+	if _duel_enemy != null and is_instance_valid(_duel_enemy) and _duel_enemy != e:
+		return false
+	return true
+
+
+func offer_duel(enemy: Node) -> bool:
+	if not can_accept_duel_from(enemy):
+		return false
+	_duel_enemy = enemy as CharacterBody3D
+	return true
+
+
+func clear_duel_from(enemy: Node) -> void:
+	if _duel_enemy == enemy:
+		_duel_enemy = null
+
+
+func _build_pickaxe() -> void:
+	_pickaxe_pivot = Node3D.new()
+	_pickaxe_pivot.name = &"PickaxePivot"
+	_pickaxe_pivot.position = Vector3(0.38, 0.9, 0.07)
+	add_child(_pickaxe_pivot)
+
+	var handle := MeshInstance3D.new()
+	var hm := BoxMesh.new()
+	hm.size = Vector3(0.07, 0.42, 0.07)
+	handle.mesh = hm
+	handle.position = Vector3(0.0, -0.12, 0.0)
+	var hmat := StandardMaterial3D.new()
+	hmat.albedo_color = Color(0.32, 0.22, 0.12)
+	hmat.roughness = 0.88
+	handle.set_surface_override_material(0, hmat)
+	_pickaxe_pivot.add_child(handle)
+
+	var head := MeshInstance3D.new()
+	var wedge := BoxMesh.new()
+	wedge.size = Vector3(0.2, 0.12, 0.14)
+	head.mesh = wedge
+	head.rotation_degrees = Vector3(15.0, 20.0, -35.0)
+	head.position = Vector3(0.16, 0.2, 0.0)
+	var pmat := StandardMaterial3D.new()
+	pmat.albedo_color = Color(0.55, 0.58, 0.62)
+	pmat.metallic = 0.65
+	pmat.roughness = 0.35
+	head.set_surface_override_material(0, pmat)
+	_pickaxe_pivot.add_child(head)
+
+
+func _setup_hp_bar() -> void:
+	var root := Node3D.new()
+	root.name = &"WorkerHpBar"
+	root.position = Vector3(0.0, 1.72, 0.0)
+	add_child(root)
+
+	var bg := MeshInstance3D.new()
+	var bg_b := BoxMesh.new()
+	bg_b.size = Vector3(0.72, 0.1, 0.03)
+	bg.mesh = bg_b
+	var bg_m := StandardMaterial3D.new()
+	bg_m.albedo_color = Color(0.06, 0.06, 0.08)
+	bg.set_surface_override_material(0, bg_m)
+	root.add_child(bg)
+
+	_hp_fill_box = BoxMesh.new()
+	_hp_fill_box.size = Vector3(0.68, 0.07, 0.024)
+	_hp_bar_fill = MeshInstance3D.new()
+	_hp_bar_fill.mesh = _hp_fill_box
+	var fm := StandardMaterial3D.new()
+	fm.albedo_color = Color(0.2, 0.85, 0.35)
+	fm.emission_enabled = true
+	fm.emission = Color(0.05, 0.2, 0.08)
+	fm.emission_energy_multiplier = 0.25
+	_hp_bar_fill.set_surface_override_material(0, fm)
+	_hp_bar_fill.position.z = 0.018
+	root.add_child(_hp_bar_fill)
+	_refresh_hp_bar_mesh()
+
+
+func _refresh_hp_bar_mesh() -> void:
+	if _hp_fill_box == null:
+		return
+	var ratio := clampf(float(hp) / float(WORKER_MAX_HP), 0.0, 1.0)
+	var w := 0.68 * ratio
+	_hp_fill_box.size = Vector3(maxf(w, 0.03), 0.07, 0.024)
+	_hp_bar_fill.position.x = -0.34 + _hp_fill_box.size.x * 0.5
+
+
+func apply_sword_hit(damage: int = 10) -> void:
+	if _state == DEAD:
+		return
+	hp -= damage
+	_refresh_hp_bar_mesh()
+	if hp <= 0:
+		_state = DEAD
+		if _duel_enemy != null and is_instance_valid(_duel_enemy) and _duel_enemy.has_method(&"notify_ally_destroyed"):
+			_duel_enemy.call(&"notify_ally_destroyed", self)
+		_duel_enemy = null
+		queue_free()
+
+
+func _process(_delta: float) -> void:
+	var bar := get_node_or_null("WorkerHpBar")
+	if bar == null:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	bar.look_at(cam.global_position, Vector3.UP)
+	bar.rotate_object_local(Vector3.UP, PI)
+
+
+func _physics_process(delta: float) -> void:
+	if _state == DEAD:
+		return
+
+	if _duel_enemy != null and not is_instance_valid(_duel_enemy):
+		_duel_enemy = null
+
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+
+	var pos_before := global_position
+
+	match _state:
+		GO_MINE:
+			collision_mask = DEFAULT_MASK
+			_stop_swing_visual()
+			_pick_nearest_mine()
+			if _target_mine == null:
+				_reset_stuck()
+				velocity.x = 0.0
+				velocity.z = 0.0
+				_state = IDLE
+			else:
+				var anchor: Vector3 = _target_mine.call(&"get_work_anchor_global") as Vector3
+				var to_m := anchor - global_position
+				to_m.y = 0.0
+				if to_m.length() < MINE_REACH:
+					_reset_stuck()
+					velocity.x = 0.0
+					velocity.z = 0.0
+					_cooldown = 0.0
+					_swinging = false
+					_strike_applied = false
+					_swing_elapsed = 0.0
+					_state = MINING
+					collision_mask = MINING_MASK
+					look_at(Vector3(anchor.x, global_position.y, anchor.z), Vector3.UP)
+				elif _unstuck != _Unstuck.NONE:
+					_apply_unstuck_movement(delta, to_m.normalized())
+				else:
+					var dir := to_m.normalized()
+					velocity.x = dir.x * SPEED
+					velocity.z = dir.z * SPEED
+					look_at(global_position + dir, Vector3.UP)
+
+		MINING:
+			collision_mask = MINING_MASK
+			var mine_ok := _target_mine != null and is_instance_valid(_target_mine)
+			if not mine_ok:
+				_target_mine = null
+				collision_mask = DEFAULT_MASK
+				_reset_stuck()
+				_state = GO_BASE if _carry > 0 else GO_MINE
+			elif int(_target_mine.call(&"get_ore_remaining")) <= 0:
+				_target_mine = null
+				collision_mask = DEFAULT_MASK
+				_reset_stuck()
+				_state = GO_BASE if _carry > 0 else GO_MINE
+			else:
+				var anchor2: Vector3 = _target_mine.call(&"get_work_anchor_global") as Vector3
+				look_at(Vector3(anchor2.x, global_position.y, anchor2.z), Vector3.UP)
+				velocity.x = 0.0
+				velocity.z = 0.0
+
+				if _swinging:
+					_swing_elapsed += delta
+					var u := clampf(_swing_elapsed / SWING_OUT, 0.0, 1.0)
+					var u2 := 0.0
+					if _swing_elapsed > SWING_OUT:
+						u2 = clampf((_swing_elapsed - SWING_OUT) / SWING_BACK, 0.0, 1.0)
+					var ang := lerpf(55.0, -48.0, u) if _swing_elapsed <= SWING_OUT else lerpf(-48.0, 55.0, u2)
+					if _pickaxe_pivot:
+						_pickaxe_pivot.rotation_degrees.z = ang
+
+					if not _strike_applied and _swing_elapsed >= SWING_OUT * 0.55:
+						_strike_applied = true
+						_do_pickaxe_strike()
+
+					if _swing_elapsed >= SWING_OUT + SWING_BACK:
+						_swinging = false
+						_strike_applied = false
+						_swing_elapsed = 0.0
+						_cooldown = MINE_HIT_INTERVAL
+				else:
+					_cooldown -= delta
+					if _pickaxe_pivot:
+						_pickaxe_pivot.rotation_degrees.z = 55.0
+					if _cooldown <= 0.0 and _carry < CARRY_CAP:
+						_swinging = true
+						_swing_elapsed = 0.0
+						_strike_applied = false
+
+				if _carry >= CARRY_CAP:
+					collision_mask = DEFAULT_MASK
+					_stop_swing_visual()
+					_reset_stuck()
+					_state = GO_BASE
+
+		GO_BASE:
+			collision_mask = DEFAULT_MASK
+			_stop_swing_visual()
+			var to_b := _deposit_global - global_position
+			to_b.y = 0.0
+			if to_b.length() < BASE_REACH:
+				_reset_stuck()
+				velocity.x = 0.0
+				velocity.z = 0.0
+				_state = UNLOAD
+			elif _unstuck != _Unstuck.NONE:
+				_apply_unstuck_movement(delta, to_b.normalized())
+			else:
+				var d := to_b.normalized()
+				velocity.x = d.x * SPEED
+				velocity.z = d.z * SPEED
+				look_at(global_position + d, Vector3.UP)
+
+		UNLOAD:
+			collision_mask = DEFAULT_MASK
+			_stop_swing_visual()
+			if _carry > 0:
+				GameState.add_ore(_carry)
+			_carry = 0
+			_state = GO_MINE
+
+		IDLE:
+			collision_mask = DEFAULT_MASK
+			_stop_swing_visual()
+			_reset_stuck()
+			velocity.x = 0.0
+			velocity.z = 0.0
+			_pick_nearest_mine()
+			if _target_mine != null:
+				_state = GO_MINE
+
+	var intent_xz := Vector2(velocity.x, velocity.z).length()
+	move_and_slide()
+
+	if _state == GO_MINE or _state == GO_BASE:
+		_update_stuck_after_move(pos_before, intent_xz, delta)
+
+
+func _reset_stuck() -> void:
+	_stuck_accum = 0.0
+	_unstuck = _Unstuck.NONE
+	_jumps_done = 0
+	_jump_cd = 0.0
+	_side_time = 0.0
+	_side_dir_xz = Vector2.ZERO
+
+
+func _update_stuck_after_move(pos_before: Vector3, intent_xz: float, delta: float) -> void:
+	if _unstuck != _Unstuck.NONE:
+		return
+	var moved_h := Vector2(global_position.x - pos_before.x, global_position.z - pos_before.z).length()
+	if intent_xz >= STUCK_INTENT_MIN and moved_h < STUCK_MOVE_EPS:
+		_stuck_accum += delta
+		if _stuck_accum >= STUCK_TIME:
+			_begin_unstuck_jump_phase()
+	else:
+		_stuck_accum = maxf(0.0, _stuck_accum - delta * 2.0)
+
+
+func _begin_unstuck_jump_phase() -> void:
+	_stuck_accum = 0.0
+	_unstuck = _Unstuck.JUMP_BURST
+	_jumps_done = 0
+	_jump_cd = 0.0
+
+
+func _apply_unstuck_movement(delta: float, toward_xz: Vector3) -> void:
+	toward_xz.y = 0.0
+	match _unstuck:
+		_Unstuck.JUMP_BURST:
+			var dir_xz := Vector2(toward_xz.x, toward_xz.z)
+			if dir_xz.length_squared() < 0.0001:
+				dir_xz = Vector2(0.0, 1.0)
+			dir_xz = dir_xz.normalized()
+			velocity.x = dir_xz.x * UNSTUCK_JUMP_FORWARD_SPEED
+			velocity.z = dir_xz.y * UNSTUCK_JUMP_FORWARD_SPEED
+			look_at(global_position + Vector3(dir_xz.x, 0.0, dir_xz.y), Vector3.UP)
+			_jump_cd -= delta
+			if is_on_floor():
+				if _jumps_done < UNSTUCK_JUMP_COUNT and _jump_cd <= 0.0:
+					velocity.y = UNSTUCK_JUMP_VEL
+					_jumps_done += 1
+					_jump_cd = UNSTUCK_JUMP_COOLDOWN
+				elif _jumps_done >= UNSTUCK_JUMP_COUNT and absf(velocity.y) < 0.2:
+					_begin_side_step(toward_xz)
+		_Unstuck.SIDE_STEP:
+			_side_time -= delta
+			velocity.x = _side_dir_xz.x * SPEED * UNSTUCK_SIDE_SPEED_MUL
+			velocity.z = _side_dir_xz.y * SPEED * UNSTUCK_SIDE_SPEED_MUL
+			if _side_dir_xz.length_squared() > 0.0001:
+				var sd := Vector3(_side_dir_xz.x, 0.0, _side_dir_xz.y).normalized()
+				look_at(global_position + sd, Vector3.UP)
+			if _side_time <= 0.0:
+				_reset_stuck()
+
+
+func _begin_side_step(toward_xz: Vector3) -> void:
+	var t2 := Vector2(toward_xz.x, toward_xz.z)
+	if t2.length_squared() < 0.0001:
+		t2 = Vector2(1.0, 0.0)
+	t2 = t2.normalized()
+	# Перпендикуляр к направлению на цель; случайный знак.
+	var perp := Vector2(-t2.y, t2.x)
+	if randf() < 0.5:
+		perp = -perp
+	_side_dir_xz = perp.normalized()
+	_side_time = UNSTUCK_SIDE_TIME
+	_unstuck = _Unstuck.SIDE_STEP
+
+
+func _do_pickaxe_strike() -> void:
+	if _target_mine == null or not is_instance_valid(_target_mine):
+		return
+	var space_left: int = CARRY_CAP - _carry
+	if space_left <= 0:
+		return
+	var want: int = mini(10, space_left)
+	var got: int = int(_target_mine.call(&"try_extract_worker_batch", want))
+	_carry += got
+
+
+func _stop_swing_visual() -> void:
+	if _pickaxe_pivot:
+		_pickaxe_pivot.rotation_degrees.z = 55.0
+
+
+func _pick_nearest_mine() -> void:
+	var best: Node = null
+	var best_d := 1e12
+	for n in get_tree().get_nodes_in_group(&"mine"):
+		if n == null or not is_instance_valid(n):
+			continue
+		if not n.has_method(&"get_ore_remaining"):
+			continue
+		if int(n.call(&"get_ore_remaining")) <= 0:
+			continue
+		var d := global_position.distance_squared_to(n.global_position)
+		if d < best_d:
+			best_d = d
+			best = n
+	_target_mine = best

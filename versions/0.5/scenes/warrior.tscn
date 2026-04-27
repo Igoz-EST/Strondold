@@ -1,0 +1,30 @@
+[gd_scene format=3 uid="uid://beeqxem2nuplg"]
+
+[ext_resource type="Script" path="res://scripts/warrior.gd" id="1_warrior"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_warrior"]
+albedo_color = Color(0.22, 0.42, 0.78, 1)
+roughness = 0.55
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape_warrior"]
+radius = 0.38
+height = 1.15
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_warrior"]
+radius = 0.36
+height = 1.05
+
+[node name="Warrior" type="CharacterBody3D"]
+collision_layer = 512
+collision_mask = 1
+floor_stop_on_slope = true
+script = ExtResource("1_warrior")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.58, 0)
+shape = SubResource("CapsuleShape_warrior")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.58, 0)
+mesh = SubResource("CapsuleMesh_warrior")
+surface_material_override/0 = SubResource("Mat_warrior")

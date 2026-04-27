@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://f247wvbx83b5"]
+
+[ext_resource type="Script" path="res://scripts/worker.gd" id="1_worker"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape_worker"]
+radius = 0.3
+height = 1.12
+
+[node name="Worker" type="CharacterBody3D"]
+collision_layer = 32
+collision_mask = 33
+floor_stop_on_slope = true
+script = ExtResource("1_worker")
+
+[node name="AvatarRoot" type="Node3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.56, 0)
+shape = SubResource("CapsuleShape_worker")

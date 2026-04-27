@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://b8minehill01"]
+
+[ext_resource type="Script" path="res://scripts/mine.gd" id="1_mine"]
+
+[node name="Mine" type="StaticBody3D"]
+script = ExtResource("1_mine")

@@ -1,0 +1,22 @@
+# Godot 4+ — кэш редактора и импорта (пересоздаётся локально)
+.godot/
+
+# Сборки
+export/
+exports/
+*.exe
+*.pck
+*.zip
+
+# Временные и бэкапы
+*.tmp
+*.bak
+*~
+
+# ОС
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Логи / отладка
+*.log
