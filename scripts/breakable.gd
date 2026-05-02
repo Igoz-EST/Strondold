@@ -8,6 +8,8 @@ const ROCK_MAX_HP := 100
 @export var is_tree: bool = true
 ## Дерево/камень выключены; HP как у камня, меш сундука. Награда — только coin_reward (без +1 монеты).
 @export var is_chest: bool = false
+## -1 = случайный вариант. 0..3 — фиксированные силуэты деревьев.
+@export var tree_variant: int = -1
 ## При разрушении: >0 — GameState.add_coins(...); иначе одна монета как у дерева/камня.
 @export var coin_reward: int = 0
 
@@ -61,30 +63,113 @@ func _ready() -> void:
 
 
 func _add_tree_meshes() -> void:
+	var variant := randi_range(0, 3) if tree_variant < 0 else wrapi(tree_variant, 0, 4)
+	match variant:
+		0:
+			_add_round_oak()
+		1:
+			_add_pine_tree()
+		2:
+			_add_birch_tree()
+		_:
+			_add_wide_old_tree()
+
+
+func _add_trunk(height: float, bottom_radius: float, top_radius: float, color: Color, pos_x: float = 0.0) -> MeshInstance3D:
 	var trunk := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
-	cm.bottom_radius = 0.48
-	cm.top_radius = 0.34
-	cm.height = 4.55
+	cm.bottom_radius = bottom_radius
+	cm.top_radius = top_radius
+	cm.height = height
 	trunk.mesh = cm
-	trunk.position.y = 2.275
+	trunk.position = Vector3(pos_x, height * 0.5, 0.0)
 	var tm := StandardMaterial3D.new()
-	tm.albedo_color = Color(0.3, 0.19, 0.1)
+	tm.albedo_color = color
 	tm.roughness = 0.9
 	trunk.set_surface_override_material(0, tm)
 	add_child(trunk)
+	return trunk
 
+
+func _add_leaf_sphere(pos: Vector3, radius: float, height: float, color: Color, scale_xz: Vector2 = Vector2.ONE) -> void:
 	var leaves := MeshInstance3D.new()
 	var sm := SphereMesh.new()
-	sm.height = 2.15
-	sm.radius = 1.28
+	sm.height = height
+	sm.radius = radius
 	leaves.mesh = sm
-	leaves.position.y = 4.95
+	leaves.position = pos
+	leaves.scale = Vector3(scale_xz.x, 1.0, scale_xz.y)
 	var lm := StandardMaterial3D.new()
-	lm.albedo_color = Color(0.12, 0.48, 0.16)
+	lm.albedo_color = color
 	lm.roughness = 0.85
 	leaves.set_surface_override_material(0, lm)
 	add_child(leaves)
+
+
+func _add_leaf_cone(pos: Vector3, bottom_radius: float, top_radius: float, height: float, color: Color) -> void:
+	var leaves := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.bottom_radius = bottom_radius
+	cm.top_radius = top_radius
+	cm.height = height
+	leaves.mesh = cm
+	leaves.position = pos
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.86
+	leaves.set_surface_override_material(0, mat)
+	add_child(leaves)
+
+
+func _add_branch(pos: Vector3, height: float, rot_z: float) -> void:
+	var branch := _add_trunk(height, 0.17, 0.08, Color(0.28, 0.16, 0.08))
+	branch.position = pos
+	branch.rotation_degrees.z = rot_z
+
+
+func _add_round_oak() -> void:
+	_add_trunk(4.1, 0.48, 0.32, Color(0.34, 0.2, 0.09))
+	_add_leaf_sphere(Vector3(0.0, 4.55, 0.0), 1.25, 1.85, Color(0.13, 0.48, 0.17), Vector2(1.1, 0.95))
+	_add_leaf_sphere(Vector3(-0.62, 4.25, 0.1), 0.9, 1.25, Color(0.1, 0.4, 0.14))
+	_add_leaf_sphere(Vector3(0.58, 4.15, -0.2), 0.82, 1.18, Color(0.16, 0.56, 0.2))
+
+
+func _add_pine_tree() -> void:
+	_add_trunk(3.6, 0.34, 0.22, Color(0.29, 0.18, 0.09))
+	_add_leaf_cone(Vector3(0.0, 3.0, 0.0), 1.2, 0.12, 1.65, Color(0.07, 0.32, 0.16))
+	_add_leaf_cone(Vector3(0.0, 4.0, 0.0), 1.0, 0.08, 1.55, Color(0.06, 0.38, 0.18))
+	_add_leaf_cone(Vector3(0.0, 4.95, 0.0), 0.72, 0.04, 1.25, Color(0.09, 0.45, 0.2))
+
+
+func _add_birch_tree() -> void:
+	_add_trunk(4.75, 0.32, 0.24, Color(0.83, 0.78, 0.65))
+	for mark in [
+		Vector3(-0.16, 1.25, 0.29),
+		Vector3(0.12, 1.95, 0.295),
+		Vector3(-0.08, 2.65, 0.285),
+		Vector3(0.16, 3.35, 0.275),
+	]:
+		var spot := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.2, 0.055, 0.018)
+		spot.mesh = bm
+		spot.position = mark
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.12, 0.1, 0.08)
+		spot.set_surface_override_material(0, mat)
+		add_child(spot)
+	_add_leaf_sphere(Vector3(0.0, 4.85, 0.0), 1.05, 1.75, Color(0.48, 0.62, 0.16), Vector2(0.85, 1.1))
+	_add_leaf_sphere(Vector3(0.48, 4.55, 0.18), 0.75, 1.05, Color(0.36, 0.55, 0.14))
+
+
+func _add_wide_old_tree() -> void:
+	var trunk := _add_trunk(3.8, 0.62, 0.42, Color(0.28, 0.16, 0.08))
+	trunk.rotation_degrees.z = 4.0
+	_add_branch(Vector3(-0.45, 2.85, 0.0), 1.25, -38.0)
+	_add_branch(Vector3(0.44, 2.75, 0.0), 1.1, 36.0)
+	_add_leaf_sphere(Vector3(-0.6, 4.0, 0.05), 1.1, 1.45, Color(0.18, 0.43, 0.13), Vector2(1.15, 0.85))
+	_add_leaf_sphere(Vector3(0.42, 4.25, -0.12), 1.2, 1.55, Color(0.13, 0.5, 0.17), Vector2(1.05, 1.0))
+	_add_leaf_sphere(Vector3(0.0, 4.85, 0.18), 0.92, 1.2, Color(0.22, 0.56, 0.18))
 
 
 func _add_rock_mesh() -> void:
@@ -157,32 +242,20 @@ func _setup_hp_bar() -> void:
 	var bg_box := BoxMesh.new()
 	bg_box.size = Vector3(0.98, 0.16, 0.045)
 	bg.mesh = bg_box
-	var bg_mat := StandardMaterial3D.new()
-	bg_mat.albedo_color = Color(0.08, 0.08, 0.1)
-	bg.set_surface_override_material(0, bg_mat)
+	bg.set_surface_override_material(0, UiStyle.bar_bg_material())
 	_bar_root.add_child(bg)
 
 	_fill_mesh = MeshInstance3D.new()
 	_fill_box = BoxMesh.new()
 	_fill_box.size = Vector3(HP_BAR_FULL_WIDTH, 0.11, 0.032)
 	_fill_mesh.mesh = _fill_box
-	var fill_mat := StandardMaterial3D.new()
-	fill_mat.albedo_color = Color(0.9, 0.14, 0.1)
-	fill_mat.emission_enabled = true
-	fill_mat.emission = Color(0.4, 0.04, 0.02)
-	fill_mat.emission_energy_multiplier = 0.4
-	fill_mat.roughness = 0.4
-	_fill_mesh.set_surface_override_material(0, fill_mat)
+	_fill_mesh.set_surface_override_material(0, UiStyle.bar_fill_material(UiStyle.BAR_HP))
 	_fill_mesh.position.z = 0.018
 	_bar_root.add_child(_fill_mesh)
 
 	_hp_label = Label3D.new()
 	_hp_label.name = "HpLabel"
-	_hp_label.no_depth_test = true
-	_hp_label.font_size = 22
-	_hp_label.outline_size = 8
-	_hp_label.modulate = Color(1.0, 0.95, 0.88)
-	_hp_label.outline_modulate = Color(0.02, 0.02, 0.04)
+	UiStyle.style_label3d(_hp_label, UiStyle.TEXT_MAIN, 22, 8)
 	_hp_label.position = Vector3(0.0, 0.15, 0.02)
 	_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_bar_root.add_child(_hp_label)
@@ -214,12 +287,16 @@ func _process(_delta: float) -> void:
 func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 	if hp <= 0:
 		return
+	var fx_pos := global_position + Vector3(0.0, 2.3 if is_tree else 0.6, 0.0)
 	if is_chest:
 		SoundManager.play_one_shot(SoundManager.KEY_HIT_CHEST)
+		FeedbackFx.show_stone_hit(get_parent(), fx_pos)
 	elif is_tree:
 		SoundManager.play_one_shot(SoundManager.KEY_HIT_WOOD)
+		FeedbackFx.show_wood_hit(get_parent(), fx_pos)
 	else:
 		SoundManager.play_one_shot(SoundManager.KEY_HIT_STONE)
+		FeedbackFx.show_stone_hit(get_parent(), fx_pos)
 	hp -= damage
 	if not _bar_shown:
 		_bar_shown = true
@@ -227,6 +304,8 @@ func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 		set_process(true)
 	_refresh_hp_fill()
 	if hp <= 0:
+		var reward := coin_reward if coin_reward > 0 else 1
+		FeedbackFx.show_coin_gain(get_parent(), global_position + Vector3(0.0, 1.2, 0.0), reward)
 		if coin_reward > 0:
 			GameState.add_coins(coin_reward)
 		else:

@@ -2,6 +2,7 @@ extends Node3D
 
 const _WorkerScene := preload("res://scenes/worker.tscn")
 const _BreakableScene := preload("res://scenes/breakable.tscn")
+const _MineScene := preload("res://scenes/mine.tscn")
 const _WaveManagerScript := preload("res://scripts/wave_manager.gd")
 const _BaseWorldHpScript := preload("res://scripts/base_world_hp.gd")
 const _PauseEscListenerScript := preload("res://scripts/pause_menu_esc_listener.gd")
@@ -10,6 +11,12 @@ const _PauseEscListenerScript := preload("res://scripts/pause_menu_esc_listener.
 const _BG_MUSIC_PATH := "res://assets/music/krepost_strondolt.mp3"
 ## Отступ сундука от маркера спавна игрока (~14, 0, 0).
 const PLAYER_SPAWN_CHEST_CLEAR := 5.0
+const MAP_RANDOM_HALF := 112.0
+const RANDOM_MINE_COUNT := 2
+const RANDOM_TREE_COUNT := 25
+const RANDOM_ROCK_COUNT := 25
+const MINE_CLEAR_RADIUS := 15.0
+const BREAKABLE_CLEAR_RADIUS := 4.6
 
 @onready var _coin_label: Label = $CanvasLayer/CoinLabel
 @onready var _ore_label: Label = $CanvasLayer/OreLabel
@@ -52,11 +59,13 @@ var _pause_menu_open: bool = false
 
 
 func _ready() -> void:
+	randomize()
 	add_to_group("main_world")
 	var wm := Node.new()
 	wm.set_script(_WaveManagerScript)
 	wm.name = "WaveManager"
 	add_child(wm)
+	_randomize_map_resources()
 	set_process_input(true)
 	set_process_unhandled_input(true)
 	_money_cmd_regex = RegEx.new()
@@ -78,6 +87,7 @@ func _ready() -> void:
 	_ore_label.focus_mode = Control.FOCUS_NONE
 	_base_hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_base_hp_label.focus_mode = Control.FOCUS_NONE
+	_setup_hud_style()
 	GameState.coins_changed.connect(_on_coins_changed)
 	GameState.ore_changed.connect(_on_ore_changed)
 	GameState.base_hp_changed.connect(_on_base_hp_changed)
@@ -88,6 +98,114 @@ func _ready() -> void:
 	_on_base_hp_changed(GameState.base_hp, GameState.BASE_MAX_HP)
 	_setup_wave_timer_ui()
 	call_deferred(&"_spawn_secret_chest_random")
+
+
+func _setup_hud_style() -> void:
+	var cl: CanvasLayer = $CanvasLayer
+	var panel := PanelContainer.new()
+	panel.name = &"TopHudPanel"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.offset_left = 10.0
+	panel.offset_top = 8.0
+	panel.offset_right = 358.0
+	panel.offset_bottom = 62.0
+	panel.add_theme_stylebox_override(&"panel", UiStyle.panel_style(UiStyle.PANEL_BG_SOFT, UiStyle.PANEL_BORDER_DIM, 9, 1))
+	cl.add_child(panel)
+	cl.move_child(panel, 0)
+
+	_coin_label.offset_left = 18.0
+	_coin_label.offset_top = 9.0
+	_coin_label.offset_right = 170.0
+	_coin_label.offset_bottom = 32.0
+	_ore_label.offset_left = 190.0
+	_ore_label.offset_top = 9.0
+	_ore_label.offset_right = 350.0
+	_ore_label.offset_bottom = 32.0
+	_base_hp_label.offset_left = 18.0
+	_base_hp_label.offset_top = 32.0
+	_base_hp_label.offset_right = 350.0
+	_base_hp_label.offset_bottom = 56.0
+
+	UiStyle.style_label(_coin_label, UiStyle.TEXT_COIN, 16, 3)
+	UiStyle.style_label(_ore_label, UiStyle.TEXT_ORE, 16, 3)
+	UiStyle.style_label(_base_hp_label, UiStyle.TEXT_HP, 15, 3)
+
+
+func _randomize_map_resources() -> void:
+	_remove_scene_resource_placeholders()
+	var occupied: Array = []
+	_add_reserved_area(occupied, Vector3.ZERO, 20.0)
+	_add_reserved_area(occupied, $ExteriorSpawn.global_position, 8.0)
+	_add_reserved_area(occupied, _worker_spawn.global_position, 7.0)
+	_add_reserved_area(occupied, _ore_deposit.global_position, 6.0)
+
+	for i in range(RANDOM_MINE_COUNT):
+		var pos := _pick_random_map_position(occupied, MINE_CLEAR_RADIUS)
+		_add_reserved_area(occupied, pos, MINE_CLEAR_RADIUS)
+		_spawn_random_mine(i, pos)
+
+	for i in range(RANDOM_TREE_COUNT):
+		var tree_pos := _pick_random_map_position(occupied, BREAKABLE_CLEAR_RADIUS)
+		_add_reserved_area(occupied, tree_pos, BREAKABLE_CLEAR_RADIUS)
+		_spawn_random_breakable(i, tree_pos, true)
+
+	for i in range(RANDOM_ROCK_COUNT):
+		var rock_pos := _pick_random_map_position(occupied, BREAKABLE_CLEAR_RADIUS)
+		_add_reserved_area(occupied, rock_pos, BREAKABLE_CLEAR_RADIUS)
+		_spawn_random_breakable(i, rock_pos, false)
+
+
+func _remove_scene_resource_placeholders() -> void:
+	for child in get_children():
+		var n := String(child.name)
+		if n.begins_with("Tree") or n.begins_with("Rock") or child.is_in_group(&"mine"):
+			remove_child(child)
+			child.free()
+
+
+func _spawn_random_mine(index: int, pos: Vector3) -> void:
+	var mine: Node3D = _MineScene.instantiate() as Node3D
+	mine.name = "Mine%d" % (index + 1)
+	mine.global_position = pos
+	mine.rotation.y = randf() * TAU
+	add_child(mine)
+
+
+func _spawn_random_breakable(index: int, pos: Vector3, is_tree: bool) -> void:
+	var obj: Node3D = _BreakableScene.instantiate() as Node3D
+	obj.name = "%s%d" % ["Tree" if is_tree else "Rock", index + 1]
+	obj.set(&"is_tree", is_tree)
+	if is_tree:
+		obj.set(&"tree_variant", index % 4)
+	obj.global_position = pos
+	obj.rotation.y = randf() * TAU
+	add_child(obj)
+
+
+func _add_reserved_area(occupied: Array, pos: Vector3, radius: float) -> void:
+	occupied.append({
+		"pos": Vector2(pos.x, pos.z),
+		"radius": radius,
+	})
+
+
+func _pick_random_map_position(occupied: Array, radius: float) -> Vector3:
+	for _i in range(256):
+		var x := randf_range(-MAP_RANDOM_HALF, MAP_RANDOM_HALF)
+		var z := randf_range(-MAP_RANDOM_HALF, MAP_RANDOM_HALF)
+		var p := Vector2(x, z)
+		if _is_random_position_clear(p, radius, occupied):
+			return Vector3(x, 0.0, z)
+	return Vector3(randf_range(-MAP_RANDOM_HALF, MAP_RANDOM_HALF), 0.0, randf_range(-MAP_RANDOM_HALF, MAP_RANDOM_HALF))
+
+
+func _is_random_position_clear(p: Vector2, radius: float, occupied: Array) -> bool:
+	for item in occupied:
+		var other := item["pos"] as Vector2
+		var min_dist := radius + float(item["radius"])
+		if p.distance_squared_to(other) < min_dist * min_dist:
+			return false
+	return true
 
 
 func _spawn_secret_chest_random() -> void:
@@ -162,10 +280,7 @@ func _setup_wave_timer_ui() -> void:
 	_wave_countdown_label.offset_bottom = 50.0
 	_wave_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_wave_countdown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_wave_countdown_label.add_theme_font_size_override("font_size", 22)
-	_wave_countdown_label.add_theme_color_override("font_color", Color(0.88, 0.55, 0.95))
-	_wave_countdown_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.08))
-	_wave_countdown_label.add_theme_constant_override("outline_size", 4)
+	UiStyle.style_label(_wave_countdown_label, Color(0.9, 0.68, 1.0), 22, 5)
 	_wave_countdown_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_wave_countdown_label.focus_mode = Control.FOCUS_NONE
 	cl.add_child(_wave_countdown_label)
@@ -203,13 +318,7 @@ func _setup_commander_build_ui() -> void:
 	bar.offset_bottom = 0.0
 	bar.mouse_filter = Control.MOUSE_FILTER_STOP
 	bar.focus_mode = Control.FOCUS_NONE
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.1, 0.1, 0.12, 0.94)
-	sb.border_color = Color(0.92, 0.92, 0.92)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(8)
-	sb.set_content_margin_all(10)
-	bar.add_theme_stylebox_override("panel", sb)
+	bar.add_theme_stylebox_override(&"panel", UiStyle.panel_style())
 	_build_layer.add_child(bar)
 
 	var tabs := TabContainer.new()
@@ -236,7 +345,7 @@ func _setup_commander_build_ui() -> void:
 	_tower_button.custom_minimum_size = Vector2(118, 96)
 	_tower_button.text = "TOWER\n🏰\nCOST: 10"
 	_tower_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_tower_button.add_theme_font_size_override("font_size", 15)
+	UiStyle.style_button(_tower_button, 15)
 	_tower_button.pressed.connect(_on_tower_button_pressed)
 	row_build.add_child(_tower_button)
 
@@ -245,7 +354,7 @@ func _setup_commander_build_ui() -> void:
 	_barracks_button.custom_minimum_size = Vector2(128, 96)
 	_barracks_button.text = "BARRACKS\n🛖\n%d монет" % GameState.BARRACKS_COST
 	_barracks_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_barracks_button.add_theme_font_size_override("font_size", 14)
+	UiStyle.style_button(_barracks_button, 14)
 	_barracks_button.tooltip_text = "До 4 воинов; после гибели новый через 10 с."
 	_barracks_button.pressed.connect(_on_barracks_button_pressed)
 	row_build.add_child(_barracks_button)
@@ -255,7 +364,7 @@ func _setup_commander_build_ui() -> void:
 	_warehouse_button.custom_minimum_size = Vector2(118, 96)
 	_warehouse_button.text = "WAREHOUSE\n📦\n%d монет" % GameState.WAREHOUSE_COST
 	_warehouse_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_warehouse_button.add_theme_font_size_override("font_size", 13)
+	UiStyle.style_button(_warehouse_button, 13)
 	_warehouse_button.tooltip_text = "Если склад ближе базы, рабочий несёт руду сюда; счёт руды общий."
 	_warehouse_button.pressed.connect(_on_warehouse_button_pressed)
 	row_build.add_child(_warehouse_button)
@@ -277,7 +386,7 @@ func _setup_commander_build_ui() -> void:
 	_dmg_upgrade_button.custom_minimum_size = Vector2(112, 96)
 	_dmg_upgrade_button.text = "DMG\n+10\n5 монет"
 	_dmg_upgrade_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_dmg_upgrade_button.add_theme_font_size_override("font_size", 14)
+	UiStyle.style_button(_dmg_upgrade_button, 14)
 	_dmg_upgrade_button.tooltip_text = "Урон меча по деревьям и камням: +10 за удар. По врагам урон без улучшений."
 	_dmg_upgrade_button.pressed.connect(_on_dmg_upgrade_pressed)
 	row_up.add_child(_dmg_upgrade_button)
@@ -296,7 +405,7 @@ func _setup_commander_build_ui() -> void:
 
 	_storage_ore_label = Label.new()
 	_storage_ore_label.text = "Руда: 0"
-	_storage_ore_label.add_theme_font_size_override("font_size", 18)
+	UiStyle.style_label(_storage_ore_label, UiStyle.TEXT_ORE, 18, 3)
 	storage_col.add_child(_storage_ore_label)
 
 	_sell_button = Button.new()
@@ -304,6 +413,7 @@ func _setup_commander_build_ui() -> void:
 	_sell_button.text = "Продать"
 	_sell_button.custom_minimum_size = Vector2(200, 44)
 	_sell_button.tooltip_text = "100 руды = 1 монета. Доступно только на базе."
+	UiStyle.style_button(_sell_button, 17)
 	_sell_button.pressed.connect(_on_sell_ore_pressed)
 	storage_col.add_child(_sell_button)
 
@@ -321,7 +431,7 @@ func _setup_commander_build_ui() -> void:
 
 	_worker_timer_label = Label.new()
 	_worker_timer_label.text = "Нет заказа на рабочего"
-	_worker_timer_label.add_theme_font_size_override("font_size", 16)
+	UiStyle.style_label(_worker_timer_label, UiStyle.TEXT_MUTED, 16, 3)
 	workers_col.add_child(_worker_timer_label)
 
 	_buy_worker_button = Button.new()
@@ -329,7 +439,7 @@ func _setup_commander_build_ui() -> void:
 	_buy_worker_button.text = "Рабочий\n%d монет" % GameState.WORKER_COST
 	_buy_worker_button.custom_minimum_size = Vector2(160, 88)
 	_buy_worker_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_buy_worker_button.add_theme_font_size_override("font_size", 15)
+	UiStyle.style_button(_buy_worker_button, 15)
 	_buy_worker_button.tooltip_text = "Появится через 5 с у базы. Пока не появится — второго заказать нельзя."
 	_buy_worker_button.pressed.connect(_on_buy_worker_pressed)
 	workers_col.add_child(_buy_worker_button)
@@ -466,17 +576,14 @@ func _setup_game_over_ui() -> void:
 	var title := Label.new()
 	title.text = "База уничтожена"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 36)
-	title.add_theme_color_override("font_color", Color(0.95, 0.35, 0.32))
-	title.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.08))
-	title.add_theme_constant_override("outline_size", 6)
+	UiStyle.style_label(title, UiStyle.TEXT_DANGER, 36, 7)
 	box.add_child(title)
 
 	_restart_button = Button.new()
 	_restart_button.text = "Restart"
 	_restart_button.custom_minimum_size = Vector2(220, 52)
 	_restart_button.focus_mode = Control.FOCUS_ALL
-	_restart_button.add_theme_font_size_override("font_size", 22)
+	UiStyle.style_button(_restart_button, 22)
 	_restart_button.pressed.connect(_on_restart_pressed)
 	box.add_child(_restart_button)
 
@@ -506,17 +613,14 @@ func _setup_victory_ui() -> void:
 	var title := Label.new()
 	title.text = "YOU WON"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 42)
-	title.add_theme_color_override("font_color", Color(0.35, 0.92, 0.55))
-	title.add_theme_color_override("font_outline_color", Color(0.04, 0.06, 0.1))
-	title.add_theme_constant_override("outline_size", 8)
+	UiStyle.style_label(title, UiStyle.TEXT_HP, 42, 8)
 	box.add_child(title)
 
 	_win_play_again_button = Button.new()
 	_win_play_again_button.text = "Play again"
 	_win_play_again_button.custom_minimum_size = Vector2(240, 52)
 	_win_play_again_button.focus_mode = Control.FOCUS_ALL
-	_win_play_again_button.add_theme_font_size_override("font_size", 22)
+	UiStyle.style_button(_win_play_again_button, 22)
 	_win_play_again_button.pressed.connect(_on_restart_pressed)
 	box.add_child(_win_play_again_button)
 
@@ -524,7 +628,7 @@ func _setup_victory_ui() -> void:
 	_win_exit_button.text = "Exit"
 	_win_exit_button.custom_minimum_size = Vector2(240, 52)
 	_win_exit_button.focus_mode = Control.FOCUS_ALL
-	_win_exit_button.add_theme_font_size_override("font_size", 22)
+	UiStyle.style_button(_win_exit_button, 22)
 	_win_exit_button.pressed.connect(_on_victory_exit_pressed)
 	box.add_child(_win_exit_button)
 
@@ -596,13 +700,7 @@ func _setup_pause_menu() -> void:
 
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(360, 0)
-	var psb := StyleBoxFlat.new()
-	psb.bg_color = Color(0.1, 0.11, 0.14, 0.96)
-	psb.border_color = Color(0.45, 0.55, 0.72)
-	psb.set_border_width_all(2)
-	psb.set_corner_radius_all(10)
-	psb.set_content_margin_all(18)
-	panel.add_theme_stylebox_override("panel", psb)
+	panel.add_theme_stylebox_override(&"panel", UiStyle.panel_style())
 	center.add_child(panel)
 
 	var col := VBoxContainer.new()
@@ -612,8 +710,7 @@ func _setup_pause_menu() -> void:
 	var title := Label.new()
 	title.text = "Пауза"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98))
+	UiStyle.style_label(title, UiStyle.TEXT_MAIN, 28, 5)
 	col.add_child(title)
 
 	var vol_row := HBoxContainer.new()
@@ -622,7 +719,7 @@ func _setup_pause_menu() -> void:
 
 	var vol_lbl := Label.new()
 	vol_lbl.text = "Музыка"
-	vol_lbl.add_theme_font_size_override("font_size", 16)
+	UiStyle.style_label(vol_lbl, UiStyle.TEXT_MAIN, 16, 3)
 	vol_row.add_child(vol_lbl)
 
 	_music_volume_slider = HSlider.new()
@@ -640,7 +737,7 @@ func _setup_pause_menu() -> void:
 
 	var sound_lbl := Label.new()
 	sound_lbl.text = "Sound"
-	sound_lbl.add_theme_font_size_override("font_size", 16)
+	UiStyle.style_label(sound_lbl, UiStyle.TEXT_MAIN, 16, 3)
 	sound_row.add_child(sound_lbl)
 
 	_sound_volume_slider = HSlider.new()
@@ -655,15 +752,14 @@ func _setup_pause_menu() -> void:
 	var esc_hint := Label.new()
 	esc_hint.text = "Esc — закрыть меню"
 	esc_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	esc_hint.add_theme_font_size_override("font_size", 13)
-	esc_hint.add_theme_color_override("font_color", Color(0.65, 0.7, 0.78))
+	UiStyle.style_label(esc_hint, UiStyle.TEXT_MUTED, 13, 2)
 	col.add_child(esc_hint)
 
 	var quit_btn := Button.new()
 	quit_btn.text = "Выйти"
 	quit_btn.custom_minimum_size = Vector2(0, 44)
 	quit_btn.focus_mode = Control.FOCUS_ALL
-	quit_btn.add_theme_font_size_override("font_size", 18)
+	UiStyle.style_button(quit_btn, 18)
 	quit_btn.pressed.connect(_on_pause_quit_pressed)
 	col.add_child(quit_btn)
 
@@ -763,13 +859,7 @@ func _setup_dev_console() -> void:
 	panel.offset_top = -132.0
 	panel.offset_bottom = -8.0
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var psb := StyleBoxFlat.new()
-	psb.bg_color = Color(0.06, 0.07, 0.1, 0.94)
-	psb.border_color = Color(0.35, 0.55, 0.85)
-	psb.set_border_width_all(2)
-	psb.set_corner_radius_all(6)
-	psb.set_content_margin_all(10)
-	panel.add_theme_stylebox_override("panel", psb)
+	panel.add_theme_stylebox_override(&"panel", UiStyle.panel_style(UiStyle.PANEL_BG_SOFT, UiStyle.PANEL_BORDER_DIM, 8, 1))
 	_dev_console_layer.add_child(panel)
 
 	var col := VBoxContainer.new()
@@ -778,8 +868,7 @@ func _setup_dev_console() -> void:
 
 	var hint := Label.new()
 	hint.text = "T — открыть. Money:число  |  wave_skip — следующая волна  |  Esc — закрыть"
-	hint.add_theme_font_size_override("font_size", 13)
-	hint.add_theme_color_override("font_color", Color(0.75, 0.8, 0.88))
+	UiStyle.style_label(hint, UiStyle.TEXT_MUTED, 13, 2)
 	col.add_child(hint)
 
 	_dev_line = LineEdit.new()

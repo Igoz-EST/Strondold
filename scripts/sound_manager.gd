@@ -28,12 +28,12 @@ const _FILE_NAMES: Dictionary = {
 ## Extra dB per one-shot (negative = quieter vs user `sfx_volume_db`).
 const _VOL_DB: Dictionary = {
 	KEY_SWORD_SWING: -10.0,
-	KEY_JUMP: -12.0,
+	KEY_JUMP: -9.0,
 	KEY_PUNCH: -11.0,
 	KEY_NPC_DEATH: -8.0,
 	KEY_SHIELD_HIT: -11.0,
-	KEY_HIT_WOOD: -14.0,
-	KEY_HIT_STONE: -13.0,
+	KEY_HIT_WOOD: -12.0,
+	KEY_HIT_STONE: -12.0,
 	KEY_HIT_CHEST: -13.0,
 }
 
@@ -187,6 +187,10 @@ func play_punch_for_target(target_id: int, extra_db: float = 0.0) -> void:
 	_punch_last_id = target_id
 	_punch_last_ms = ms
 	play_one_shot(KEY_PUNCH, -1.0, extra_db)
+
+
+func play_jump() -> void:
+	play_one_shot(KEY_JUMP, 0.16, -1.0, 0.88, 0.96)
 
 
 func play_npc_death(extra_db: float = 0.0) -> void:

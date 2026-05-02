@@ -65,10 +65,12 @@ func configure(kind_in: int) -> void:
 
 func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 	hp -= damage
+	FeedbackFx.spawn_hit_burst(get_parent(), global_position + Vector3(0.0, 1.0, 0.0), Color(0.78, 0.08, 0.06), 7, 0.85)
 	if is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
 		_hp_bar.call(&"set_hp", hp, max_hp)
 	if hp <= 0:
 		SoundManager.play_npc_death()
+		FeedbackFx.show_coin_gain(get_parent(), global_position + Vector3(0.0, 1.35, 0.0), 1)
 		GameState.add_coin()
 		queue_free()
 	elif damage > 0:

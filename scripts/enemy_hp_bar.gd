@@ -26,22 +26,14 @@ func _build_visuals() -> void:
 	var bg_b := BoxMesh.new()
 	bg_b.size = Vector3(BAR_WIDTH + 0.08, BAR_HEIGHT + 0.06, 0.05)
 	bg.mesh = bg_b
-	var bg_m := StandardMaterial3D.new()
-	bg_m.albedo_color = Color(0.06, 0.06, 0.08)
-	bg.set_surface_override_material(0, bg_m)
+	bg.set_surface_override_material(0, UiStyle.bar_bg_material())
 	_bar_root.add_child(bg)
 
 	_fill_box = BoxMesh.new()
 	_fill_box.size = Vector3(BAR_WIDTH, BAR_HEIGHT, 0.03)
 	_fill_mesh = MeshInstance3D.new()
 	_fill_mesh.mesh = _fill_box
-	var fm := StandardMaterial3D.new()
-	fm.albedo_color = Color(0.25, 0.82, 0.35)
-	fm.emission_enabled = true
-	fm.emission = Color(0.08, 0.25, 0.1)
-	fm.emission_energy_multiplier = 0.2
-	fm.roughness = 0.5
-	_fill_mesh.set_surface_override_material(0, fm)
+	_fill_mesh.set_surface_override_material(0, UiStyle.bar_fill_material(UiStyle.BAR_HP))
 	_fill_mesh.position.z = 0.028
 	_bar_root.add_child(_fill_mesh)
 

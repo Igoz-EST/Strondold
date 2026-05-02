@@ -11,10 +11,16 @@ const PITCH_MAX := 55.0
 
 const COMMANDER_CAM_HEIGHT := 34.0
 const COMMANDER_ORBIT_RADIUS := 22.0
-const COMMANDER_PAN_SPEED := 22.0
+const COMMANDER_PAN_SPEED := 42.0
 const COMMANDER_FOCUS_CLAMP := 126.0
+const COMMANDER_ZOOM_MIN := 0.55
+const COMMANDER_ZOOM_MAX := 1.75
+const COMMANDER_ZOOM_STEP := 0.12
 
 const _HumanoidAvatarBuilder := preload("res://scripts/humanoid_avatar_builder.gd")
+const _TowerFactory := preload("res://scripts/tower_scene.gd")
+const _BarracksFactory := preload("res://scripts/barracks_scene.gd")
+const _WarehouseFactory := preload("res://scripts/warehouse_scene.gd")
 
 const SWING_OUT := 0.15
 const SWING_BACK := 0.2
@@ -36,6 +42,7 @@ const DEFAULT_COLLISION_MASK := 33 | LAYER_ENEMY
 @onready var _command_zone: Area3D = $"../BaseCommandZone"
 @onready var _interior_spawn: Node3D = $"../InteriorSpawn"
 @onready var _exterior_spawn: Node3D = $"../ExteriorSpawn"
+@onready var _spawn_zone_visual: Node3D = $"../ExteriorSpawn/PlayerSpawnZoneVisual"
 @onready var _canvas_layer: CanvasLayer = $"../CanvasLayer"
 
 var _enter_commander_hint: Label
@@ -44,6 +51,13 @@ var _inside_base := false
 var _in_command_zone := false
 var _commander_focus := Vector3.ZERO
 var _commander_yaw := 0.0
+var _commander_zoom := 1.0
+var _commander_dragging := false
+var _commander_drag_anchor: Variant = null
+var _commander_rotating := false
+var _build_preview: Node3D = null
+var _build_preview_type: int = GameState.BUILD_NONE
+var _build_preview_valid := false
 var _saved_collision_layer: int = 2
 var _saved_collision_mask: int = DEFAULT_COLLISION_MASK
 
@@ -85,6 +99,7 @@ func _ready() -> void:
 	_command_zone.body_entered.connect(_on_command_zone_body_entered)
 	_command_zone.body_exited.connect(_on_command_zone_body_exited)
 	_setup_commander_enter_hint()
+	_spawn_zone_visual.visible = false
 	_commander_cam.current = false
 	_reset_sword_pose()
 	call_deferred("_start_game_in_commander")
@@ -103,10 +118,7 @@ func _setup_commander_enter_hint() -> void:
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lbl.visible = false
-	lbl.add_theme_font_size_override(&"font_size", 22)
-	lbl.add_theme_color_override(&"font_color", Color(0.92, 0.94, 0.98, 1))
-	lbl.add_theme_color_override(&"font_outline_color", Color(0.05, 0.05, 0.08, 1))
-	lbl.add_theme_constant_override(&"outline_size", 5)
+	UiStyle.style_label(lbl, UiStyle.TEXT_MAIN, 22, 5)
 	lbl.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	lbl.offset_top = -96.0
 	lbl.offset_bottom = -56.0
@@ -155,27 +167,75 @@ func _update_walk_animation(delta: float) -> void:
 
 
 func _setup_sword_visuals() -> void:
-	# Pivot at the character's right — swing rotates around vertical (Y), slash travels side → front.
 	_sword_hilt = Node3D.new()
 	_sword_hilt.name = "SwordHilt"
-	_sword_hilt.position = Vector3(0.46, 0.02, -0.1)
-	add_child(_sword_hilt)
+	if _arm_r != null:
+		_arm_r.add_child(_sword_hilt)
+		_sword_hilt.position = Vector3(0.08, -0.42, 0.04)
+		_sword_hilt.rotation_degrees = Vector3(0.0, -12.0, 82.0)
+	else:
+		add_child(_sword_hilt)
+		_sword_hilt.position = Vector3(0.46, 0.02, -0.1)
 
 	_swing_pivot = Node3D.new()
 	_swing_pivot.name = "SwingPivot"
 	_sword_hilt.add_child(_swing_pivot)
 
+	var grip := MeshInstance3D.new()
+	var grip_mesh := CylinderMesh.new()
+	grip_mesh.bottom_radius = 0.055
+	grip_mesh.top_radius = 0.05
+	grip_mesh.height = 0.32
+	grip.mesh = grip_mesh
+	grip.position = Vector3(-0.12, 0.0, 0.0)
+	grip.rotation_degrees.z = 90.0
+	var grip_mat := StandardMaterial3D.new()
+	grip_mat.albedo_color = Color(0.2, 0.11, 0.055)
+	grip_mat.roughness = 0.85
+	grip.set_surface_override_material(0, grip_mat)
+	_swing_pivot.add_child(grip)
+
+	var guard := MeshInstance3D.new()
+	var guard_mesh := BoxMesh.new()
+	guard_mesh.size = Vector3(0.08, 0.1, 0.48)
+	guard.mesh = guard_mesh
+	guard.position = Vector3(0.06, 0.0, 0.0)
+	var guard_mat := StandardMaterial3D.new()
+	guard_mat.albedo_color = Color(0.78, 0.62, 0.22)
+	guard_mat.metallic = 0.45
+	guard_mat.roughness = 0.35
+	guard.set_surface_override_material(0, guard_mat)
+	_swing_pivot.add_child(guard)
+
 	var blade := MeshInstance3D.new()
 	var blade_mesh := BoxMesh.new()
-	blade_mesh.size = Vector3(0.56, 0.09, 0.11)
+	blade_mesh.size = Vector3(0.74, 0.055, 0.105)
 	blade.mesh = blade_mesh
-	blade.position = Vector3(0.3, 0.06, 0.0)
+	blade.position = Vector3(0.45, 0.0, 0.0)
 	var blade_mat := StandardMaterial3D.new()
 	blade_mat.albedo_color = Color(0.88, 0.9, 0.96)
 	blade_mat.metallic = 0.75
 	blade_mat.roughness = 0.28
 	blade.set_surface_override_material(0, blade_mat)
 	_swing_pivot.add_child(blade)
+
+	var tip := MeshInstance3D.new()
+	var tip_mesh := BoxMesh.new()
+	tip_mesh.size = Vector3(0.16, 0.05, 0.09)
+	tip.mesh = tip_mesh
+	tip.position = Vector3(0.9, 0.0, 0.0)
+	tip.rotation_degrees.z = 45.0
+	tip.set_surface_override_material(0, blade_mat)
+	_swing_pivot.add_child(tip)
+
+	var pommel := MeshInstance3D.new()
+	var pommel_mesh := SphereMesh.new()
+	pommel_mesh.radius = 0.075
+	pommel_mesh.height = 0.12
+	pommel.mesh = pommel_mesh
+	pommel.position = Vector3(-0.3, 0.0, 0.0)
+	pommel.set_surface_override_material(0, guard_mat)
+	_swing_pivot.add_child(pommel)
 
 	_swing_arc = MeshInstance3D.new()
 	_swing_arc.name = "SwingArc"
@@ -272,6 +332,28 @@ func _unhandled_input(event: InputEvent) -> void:
 	if GameState.dev_console_open:
 		return
 
+	if _inside_base and event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
+			_commander_zoom = clampf(_commander_zoom - COMMANDER_ZOOM_STEP, COMMANDER_ZOOM_MIN, COMMANDER_ZOOM_MAX)
+			get_viewport().set_input_as_handled()
+			return
+		if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
+			_commander_zoom = clampf(_commander_zoom + COMMANDER_ZOOM_STEP, COMMANDER_ZOOM_MIN, COMMANDER_ZOOM_MAX)
+			get_viewport().set_input_as_handled()
+			return
+		if mb.button_index == MOUSE_BUTTON_MIDDLE:
+			_commander_dragging = mb.pressed
+			_commander_drag_anchor = _commander_ground_plane_hit(mb.position) if mb.pressed else null
+			Input.set_default_cursor_shape(Input.CURSOR_DRAG if mb.pressed else Input.CURSOR_ARROW)
+			get_viewport().set_input_as_handled()
+			return
+		if mb.button_index == MOUSE_BUTTON_RIGHT:
+			if GameState.awaiting_build_type == GameState.BUILD_NONE:
+				_commander_rotating = mb.pressed
+				get_viewport().set_input_as_handled()
+				return
+
 	if _inside_base and event is InputEventMouseButton and event.pressed:
 		if GameState.awaiting_build_type != GameState.BUILD_NONE:
 			if event.button_index == MOUSE_BUTTON_RIGHT:
@@ -282,12 +364,20 @@ func _unhandled_input(event: InputEvent) -> void:
 				if get_viewport().gui_get_hovered_control() != null:
 					return
 				var gp: Variant = _commander_ground_hit(event.position)
-				if gp != null and GameState.try_place_tower(gp as Vector3):
+				if gp != null and _build_preview_valid and GameState.try_place_tower(gp as Vector3):
+					_clear_build_preview()
 					get_viewport().set_input_as_handled()
 				return
 
 	if _inside_base and event is InputEventMouseMotion and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-		_commander_yaw -= event.relative.x * MOUSE_SENS
+		var mm := event as InputEventMouseMotion
+		if _commander_dragging:
+			_update_commander_drag(mm.position)
+			get_viewport().set_input_as_handled()
+			return
+		if _commander_rotating:
+			_commander_yaw -= mm.relative.x * MOUSE_SENS
+			get_viewport().set_input_as_handled()
 
 	if not _inside_base and event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -326,6 +416,46 @@ func _commander_ground_hit(screen_pos: Vector2) -> Variant:
 	return hit["position"] as Vector3
 
 
+func _commander_any_build_hit(screen_pos: Vector2) -> Variant:
+	var from := _commander_cam.project_ray_origin(screen_pos)
+	var dir := _commander_cam.project_ray_normal(screen_pos)
+	var to := from + dir * 900.0
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(from, to)
+	q.collision_mask = 1
+	q.collide_with_areas = false
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return null
+	return hit["position"] as Vector3
+
+
+func _commander_ground_plane_hit(screen_pos: Vector2) -> Variant:
+	var from := _commander_cam.project_ray_origin(screen_pos)
+	var dir := _commander_cam.project_ray_normal(screen_pos)
+	if absf(dir.y) < 0.001:
+		return null
+	var t := -from.y / dir.y
+	if t < 0.0:
+		return null
+	return from + dir * t
+
+
+func _update_commander_drag(screen_pos: Vector2) -> void:
+	if _commander_drag_anchor == null:
+		_commander_drag_anchor = _commander_ground_plane_hit(screen_pos)
+		return
+	var hit: Variant = _commander_ground_plane_hit(screen_pos)
+	if hit == null:
+		return
+	var anchor := _commander_drag_anchor as Vector3
+	var delta := anchor - (hit as Vector3)
+	_commander_focus.x += delta.x
+	_commander_focus.z += delta.z
+	_clamp_commander_focus()
+	_update_commander_camera(0.0)
+
+
 func _physics_process(delta: float) -> void:
 	if _inside_base:
 		_set_commander_enter_hint_visible(false)
@@ -333,6 +463,7 @@ func _physics_process(delta: float) -> void:
 		global_position = _interior_spawn.global_position
 		velocity = Vector3.ZERO
 		_update_commander_camera(delta)
+		_update_build_preview()
 		if Input.is_action_just_pressed(&"interact"):
 			_exit_commander_mode()
 		return
@@ -351,7 +482,7 @@ func _physics_process(delta: float) -> void:
 
 	if is_on_floor() and Input.is_action_just_pressed(&"jump"):
 		velocity.y = JUMP_VELOCITY
-		SoundManager.play_one_shot(SoundManager.KEY_JUMP)
+		SoundManager.play_jump()
 
 	if Input.is_action_just_pressed(&"interact"):
 		if _in_command_zone and is_on_floor():
@@ -470,19 +601,107 @@ func _update_commander_camera(delta: float) -> void:
 	var pan := (pan_right * input_dir.x + pan_forward * (-input_dir.y)) * COMMANDER_PAN_SPEED * delta
 	_commander_focus.x += pan.x
 	_commander_focus.z += pan.z
-	_commander_focus.x = clampf(_commander_focus.x, -COMMANDER_FOCUS_CLAMP, COMMANDER_FOCUS_CLAMP)
-	_commander_focus.z = clampf(_commander_focus.z, -COMMANDER_FOCUS_CLAMP, COMMANDER_FOCUS_CLAMP)
+	_clamp_commander_focus()
 
-	var offset := Vector3(0.0, COMMANDER_CAM_HEIGHT, COMMANDER_ORBIT_RADIUS).rotated(Vector3.UP, _commander_yaw)
+	var offset := Vector3(
+		0.0,
+		COMMANDER_CAM_HEIGHT * _commander_zoom,
+		COMMANDER_ORBIT_RADIUS * _commander_zoom
+	).rotated(Vector3.UP, _commander_yaw)
 	var cam_pos := _commander_focus + offset
 	_commander_cam.global_position = cam_pos
 	_commander_cam.look_at(Vector3(_commander_focus.x, 1.2, _commander_focus.z))
+
+
+func _clamp_commander_focus() -> void:
+	_commander_focus.x = clampf(_commander_focus.x, -COMMANDER_FOCUS_CLAMP, COMMANDER_FOCUS_CLAMP)
+	_commander_focus.z = clampf(_commander_focus.z, -COMMANDER_FOCUS_CLAMP, COMMANDER_FOCUS_CLAMP)
+
+
+func _update_build_preview() -> void:
+	var build_type := GameState.awaiting_build_type
+	if build_type == GameState.BUILD_NONE:
+		_clear_build_preview()
+		return
+	if _build_preview == null or _build_preview_type != build_type:
+		_create_build_preview(build_type)
+
+	var hit: Variant = _commander_any_build_hit(get_viewport().get_mouse_position())
+	if hit == null:
+		if _build_preview:
+			_build_preview.visible = false
+		_build_preview_valid = false
+		return
+
+	var pos := hit as Vector3
+	_build_preview.visible = true
+	_build_preview.global_position = pos
+	_build_preview_valid = GameState.can_place_build_at(pos)
+	var tint := Color(0.15, 1.0, 0.22, 0.48) if _build_preview_valid else Color(1.0, 0.08, 0.04, 0.5)
+	_tint_build_preview(tint)
+
+
+func _create_build_preview(build_type: int) -> void:
+	_clear_build_preview()
+	match build_type:
+		GameState.BUILD_TOWER:
+			_build_preview = _TowerFactory.create_tower()
+		GameState.BUILD_BARRACKS:
+			_build_preview = _BarracksFactory.create_barracks()
+		GameState.BUILD_WAREHOUSE:
+			_build_preview = _WarehouseFactory.create_warehouse()
+		_:
+			return
+	_build_preview_type = build_type
+	_build_preview.name = &"BuildPreview"
+	_build_preview.set_script(null)
+	_build_preview.collision_layer = 0
+	_build_preview.collision_mask = 0
+	_disable_preview_collisions(_build_preview)
+	get_parent().add_child(_build_preview)
+
+
+func _clear_build_preview() -> void:
+	if _build_preview != null and is_instance_valid(_build_preview):
+		_build_preview.queue_free()
+	_build_preview = null
+	_build_preview_type = GameState.BUILD_NONE
+	_build_preview_valid = false
+
+
+func _disable_preview_collisions(node: Node) -> void:
+	if node is CollisionShape3D:
+		(node as CollisionShape3D).disabled = true
+	for child in node.get_children():
+		_disable_preview_collisions(child)
+
+
+func _tint_build_preview(color: Color) -> void:
+	if _build_preview == null:
+		return
+	_tint_preview_node(_build_preview, color)
+
+
+func _tint_preview_node(node: Node, color: Color) -> void:
+	if node is MeshInstance3D:
+		var mesh_i := node as MeshInstance3D
+		var mat := StandardMaterial3D.new()
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.albedo_color = color
+		mat.emission_enabled = true
+		mat.emission = Color(color.r, color.g, color.b)
+		mat.emission_energy_multiplier = 0.25
+		mat.roughness = 0.55
+		mesh_i.material_override = mat
+	for child in node.get_children():
+		_tint_preview_node(child, color)
 
 
 func _enter_commander_mode() -> void:
 	_inside_base = true
 	GameState.set_commander_mode(true)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_spawn_zone_visual.visible = true
 	_base_collision.disabled = true
 	_saved_collision_layer = collision_layer
 	_saved_collision_mask = collision_mask
@@ -498,6 +717,10 @@ func _enter_commander_mode() -> void:
 	velocity = Vector3.ZERO
 	_commander_focus = Vector3.ZERO
 	_commander_yaw = deg_to_rad(-38.0)
+	_commander_zoom = 1.0
+	_commander_dragging = false
+	_commander_drag_anchor = null
+	_commander_rotating = false
 	_camera.current = false
 	_commander_cam.current = true
 	_update_commander_camera(0.0)
@@ -508,6 +731,12 @@ func _exit_commander_mode() -> void:
 	GameState.set_commander_mode(false)
 	get_viewport().gui_release_focus()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	_spawn_zone_visual.visible = false
+	_clear_build_preview()
+	_commander_dragging = false
+	_commander_drag_anchor = null
+	_commander_rotating = false
 	_base_collision.disabled = false
 	collision_layer = _saved_collision_layer
 	collision_mask = _saved_collision_mask

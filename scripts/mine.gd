@@ -7,6 +7,10 @@ const LAYER_BREAKABLE := 32
 const SLIDE_PUSH := 52.0
 const SLIDE_R_MIN := 0.2
 const SLIDE_R_MAX := 10.5
+## Невидимая цилиндрическая стена вплотную к шахте: шахтеры и враги не проходят внутрь.
+const CLIMB_BLOCKER_RADIUS := 6.05
+const CLIMB_BLOCKER_HEIGHT := 8.0
+const WORK_ANCHOR_Z := CLIMB_BLOCKER_RADIUS + 0.8
 
 const ORE_PER_HIT := 10
 const MINE_ORE_MAX := 5000
@@ -38,6 +42,7 @@ func _ready() -> void:
 	col.shape = sp
 	col.position = Vector3(0.0, -3.9, 0.0)
 	add_child(col)
+	_setup_climb_blocker()
 
 	var hill := MeshInstance3D.new()
 	var sm := SphereMesh.new()
@@ -66,6 +71,18 @@ func _ready() -> void:
 	_setup_ore_bar()
 
 
+func _setup_climb_blocker() -> void:
+	var shape := CylinderShape3D.new()
+	shape.radius = CLIMB_BLOCKER_RADIUS
+	shape.height = CLIMB_BLOCKER_HEIGHT
+
+	var wall := CollisionShape3D.new()
+	wall.name = &"ClimbBlocker"
+	wall.shape = shape
+	wall.position = Vector3(0.0, CLIMB_BLOCKER_HEIGHT * 0.5 - 0.05, 0.0)
+	add_child(wall)
+
+
 func _setup_ore_bar() -> void:
 	_bar_root = Node3D.new()
 	_bar_root.name = &"OreBar"
@@ -76,22 +93,14 @@ func _setup_ore_bar() -> void:
 	var bg_box := BoxMesh.new()
 	bg_box.size = Vector3(BAR_WIDTH + 0.08, BAR_HEIGHT + 0.06, 0.06)
 	bg.mesh = bg_box
-	var bg_mat := StandardMaterial3D.new()
-	bg_mat.albedo_color = Color(0.06, 0.06, 0.08)
-	bg.set_surface_override_material(0, bg_mat)
+	bg.set_surface_override_material(0, UiStyle.bar_bg_material())
 	_bar_root.add_child(bg)
 
 	_fill_mesh = MeshInstance3D.new()
 	_fill_box = BoxMesh.new()
 	_fill_box.size = Vector3(BAR_WIDTH, BAR_HEIGHT, 0.04)
 	_fill_mesh.mesh = _fill_box
-	var fill_mat := StandardMaterial3D.new()
-	fill_mat.albedo_color = Color(0.25, 0.82, 0.95)
-	fill_mat.emission_enabled = true
-	fill_mat.emission = Color(0.05, 0.25, 0.35)
-	fill_mat.emission_energy_multiplier = 0.35
-	fill_mat.roughness = 0.45
-	_fill_mesh.set_surface_override_material(0, fill_mat)
+	_fill_mesh.set_surface_override_material(0, UiStyle.bar_fill_material(UiStyle.BAR_ORE))
 	_fill_mesh.position.z = 0.035
 	_bar_root.add_child(_fill_mesh)
 
@@ -143,6 +152,8 @@ func try_extract_worker_batch(max_amount: int) -> int:
 	var take: int = mini(max_amount, ore_remaining)
 	ore_remaining -= take
 	_refresh_mine_bar()
+	FeedbackFx.show_stone_hit(get_parent(), get_work_anchor_global() + Vector3(0.0, 0.55, 0.0))
+	FeedbackFx.show_ore_gain(get_parent(), get_work_anchor_global() + Vector3(0.0, 1.15, 0.0), take)
 	return take
 
 
@@ -154,8 +165,10 @@ func apply_sword_hit(_damage: int = 0, _attacker: Node = null) -> void:
 	ore_remaining -= take
 	_refresh_mine_bar()
 	if take > 0:
+		FeedbackFx.show_stone_hit(get_parent(), get_work_anchor_global() + Vector3(0.0, 0.55, 0.0))
+		FeedbackFx.show_ore_gain(get_parent(), get_work_anchor_global() + Vector3(0.0, 1.15, 0.0), take)
 		GameState.add_ore(take)
 
 
 func get_work_anchor_global() -> Vector3:
-	return global_transform * Vector3(0.0, 0.55, 3.85)
+	return global_transform * Vector3(0.0, 0.55, WORK_ANCHOR_Z)

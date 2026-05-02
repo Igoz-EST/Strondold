@@ -19,3 +19,5 @@ config/icon="res://icon.svg"
 
 GameState="*res://scripts/game_state.gd"
 SoundManager="*res://scripts/sound_manager.gd"
+FeedbackFx="*res://scripts/feedback_fx.gd"
+UiStyle="*res://scripts/ui_style.gd"

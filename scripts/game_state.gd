@@ -20,6 +20,9 @@ const WORKER_COST := 5
 const BASE_MAX_HP := 1000
 ## Горизонтальный радиус вокруг маркера группы `player_spawn_zone`, где нельзя ставить башни/бараки.
 const PLAYER_NO_BUILD_RADIUS := 2.5
+const BUILD_BASE_CLEAR := 6.5
+const BUILD_MAX_GROUND_Y := 0.22
+const BUILD_MINE_CLEAR_RADIUS := 12.0
 
 var coins: int = 10
 var ore: int = 0
@@ -186,6 +189,24 @@ func _is_in_player_no_build(p: Vector3) -> bool:
 	return dx * dx + dz * dz <= PLAYER_NO_BUILD_RADIUS * PLAYER_NO_BUILD_RADIUS
 
 
+func can_place_build_at(world_pos: Vector3) -> bool:
+	if absf(world_pos.x) < BUILD_BASE_CLEAR and absf(world_pos.z) < BUILD_BASE_CLEAR:
+		return false
+	if world_pos.y > BUILD_MAX_GROUND_Y:
+		return false
+	if _is_in_player_no_build(world_pos):
+		return false
+	for mine in get_tree().get_nodes_in_group(&"mine"):
+		if not (mine is Node3D) or not is_instance_valid(mine):
+			continue
+		var m := mine as Node3D
+		var dx := world_pos.x - m.global_position.x
+		var dz := world_pos.z - m.global_position.z
+		if dx * dx + dz * dz <= BUILD_MINE_CLEAR_RADIUS * BUILD_MINE_CLEAR_RADIUS:
+			return false
+	return true
+
+
 func try_place_tower(world_pos: Vector3) -> bool:
 	if awaiting_build_type == BUILD_NONE or not commander_active:
 		return false
@@ -198,9 +219,7 @@ func try_place_tower(world_pos: Vector3) -> bool:
 		cancel_tower_blueprint()
 		return false
 	var p := world_pos
-	if absf(p.x) < 6.5 and absf(p.z) < 6.5:
-		return false
-	if _is_in_player_no_build(p):
+	if not can_place_build_at(p):
 		return false
 	if not spend_coins(cost):
 		cancel_tower_blueprint()

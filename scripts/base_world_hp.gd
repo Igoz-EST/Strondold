@@ -27,32 +27,20 @@ func _build_visuals() -> void:
 	var bg_b := BoxMesh.new()
 	bg_b.size = Vector3(BAR_WIDTH + 0.1, BAR_HEIGHT + 0.08, 0.06)
 	bg.mesh = bg_b
-	var bg_m := StandardMaterial3D.new()
-	bg_m.albedo_color = Color(0.08, 0.08, 0.1)
-	bg.set_surface_override_material(0, bg_m)
+	bg.set_surface_override_material(0, UiStyle.bar_bg_material())
 	_bar_root.add_child(bg)
 
 	_fill_box = BoxMesh.new()
 	_fill_box.size = Vector3(BAR_WIDTH, BAR_HEIGHT, 0.04)
 	_fill_mesh = MeshInstance3D.new()
 	_fill_mesh.mesh = _fill_box
-	var fm := StandardMaterial3D.new()
-	fm.albedo_color = Color(0.88, 0.22, 0.2)
-	fm.emission_enabled = true
-	fm.emission = Color(0.35, 0.05, 0.04)
-	fm.emission_energy_multiplier = 0.25
-	fm.roughness = 0.45
-	_fill_mesh.set_surface_override_material(0, fm)
+	_fill_mesh.set_surface_override_material(0, UiStyle.bar_fill_material(UiStyle.BAR_HP))
 	_fill_mesh.position.z = 0.035
 	_bar_root.add_child(_fill_mesh)
 
 	_hp_label = Label3D.new()
 	_hp_label.name = &"HpLabel"
-	_hp_label.font_size = 28
-	_hp_label.outline_size = 10
-	_hp_label.modulate = Color(1.0, 0.92, 0.9)
-	_hp_label.outline_modulate = Color(0.02, 0.02, 0.04)
-	_hp_label.no_depth_test = true
+	UiStyle.style_label3d(_hp_label, UiStyle.TEXT_MAIN, 28, 10)
 	_hp_label.position = Vector3(0.0, 0.42, 0.0)
 	_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_bar_root.add_child(_hp_label)

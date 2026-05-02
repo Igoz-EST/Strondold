@@ -137,6 +137,22 @@ func _unload_destination() -> Vector3:
 	return _deposit_global
 
 
+func _nearest_unload_for_point(point: Vector3) -> Vector3:
+	var best := _deposit_global
+	var best_d := point.distance_squared_to(best)
+	for n in get_tree().get_nodes_in_group(&"warehouse"):
+		if n == null or not is_instance_valid(n):
+			continue
+		if not n.has_method(&"get_unload_anchor_global"):
+			continue
+		var uw: Vector3 = n.call(&"get_unload_anchor_global") as Vector3
+		var d := point.distance_squared_to(uw)
+		if d < best_d:
+			best_d = d
+			best = uw
+	return best
+
+
 func is_alive_for_combat() -> bool:
 	return _state != DEAD and hp > 0
 
@@ -208,21 +224,14 @@ func _setup_hp_bar() -> void:
 	var bg_b := BoxMesh.new()
 	bg_b.size = Vector3(0.72, 0.1, 0.03)
 	bg.mesh = bg_b
-	var bg_m := StandardMaterial3D.new()
-	bg_m.albedo_color = Color(0.06, 0.06, 0.08)
-	bg.set_surface_override_material(0, bg_m)
+	bg.set_surface_override_material(0, UiStyle.bar_bg_material())
 	root.add_child(bg)
 
 	_hp_fill_box = BoxMesh.new()
 	_hp_fill_box.size = Vector3(0.68, 0.07, 0.024)
 	_hp_bar_fill = MeshInstance3D.new()
 	_hp_bar_fill.mesh = _hp_fill_box
-	var fm := StandardMaterial3D.new()
-	fm.albedo_color = Color(0.2, 0.85, 0.35)
-	fm.emission_enabled = true
-	fm.emission = Color(0.05, 0.2, 0.08)
-	fm.emission_energy_multiplier = 0.25
-	_hp_bar_fill.set_surface_override_material(0, fm)
+	_hp_bar_fill.set_surface_override_material(0, UiStyle.bar_fill_material(UiStyle.BAR_ALLY_HP))
 	_hp_bar_fill.position.z = 0.018
 	root.add_child(_hp_bar_fill)
 	_refresh_hp_bar_mesh()
@@ -397,6 +406,7 @@ func _physics_process(delta: float) -> void:
 			collision_mask = DEFAULT_MASK
 			_stop_swing_visual()
 			if _carry > 0:
+				FeedbackFx.show_ore_gain(get_parent(), global_position + Vector3(0.0, 1.55, 0.0), _carry)
 				GameState.add_ore(_carry)
 			_carry = 0
 			_unload_warehouse = null
@@ -534,7 +544,7 @@ func _update_worker_walk_anim(delta: float) -> void:
 
 func _pick_nearest_mine() -> void:
 	var best: Node = null
-	var best_d := 1e12
+	var best_route := INF
 	for n in get_tree().get_nodes_in_group(&"mine"):
 		if n == null or not is_instance_valid(n):
 			continue
@@ -542,8 +552,13 @@ func _pick_nearest_mine() -> void:
 			continue
 		if int(n.call(&"get_ore_remaining")) <= 0:
 			continue
-		var d := global_position.distance_squared_to(n.global_position)
-		if d < best_d:
-			best_d = d
+		var mine_node := n as Node3D
+		var anchor: Vector3 = mine_node.global_position
+		if n.has_method(&"get_work_anchor_global"):
+			anchor = n.call(&"get_work_anchor_global") as Vector3
+		var unload := _nearest_unload_for_point(anchor)
+		var route := global_position.distance_to(anchor) + anchor.distance_to(unload)
+		if route < best_route:
+			best_route = route
 			best = n
 	_target_mine = best
