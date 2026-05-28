@@ -43,7 +43,7 @@ func _ready() -> void:
 	_hp_bar = bar
 
 
-func configure(kind_in: int) -> void:
+func configure(kind_in: int, stat_multiplier: float = 1.0, size_multiplier: float = 1.0) -> void:
 	kind = kind_in
 	match kind:
 		Kind.NORMAL:
@@ -60,6 +60,11 @@ func configure(kind_in: int) -> void:
 			damage_to_base = 100
 			max_hp = 400
 			scale = Vector3(3.5, 3.5, 3.5)
+	if stat_multiplier != 1.0:
+		damage_to_base = maxi(1, int(round(float(damage_to_base) * stat_multiplier)))
+		max_hp = maxi(1, int(round(float(max_hp) * stat_multiplier)))
+	if size_multiplier != 1.0:
+		scale *= size_multiplier
 	hp = max_hp
 
 

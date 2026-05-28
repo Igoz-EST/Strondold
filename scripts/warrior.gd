@@ -21,6 +21,8 @@ const AVATAR_SCALE := 0.92
 
 var hp: int = MAX_HP
 var max_hp: int = MAX_HP
+var upgrade_level := 1
+var melee_damage := MELEE_DAMAGE
 
 var _barracks: Node3D = null
 var _slot_index: int = -1
@@ -89,6 +91,56 @@ func _ready() -> void:
 	_hp_bar = bar
 	if _hp_bar.has_method(&"set_hp"):
 		_hp_bar.call(&"set_hp", hp, max_hp)
+	if is_instance_valid(_barracks) and _barracks.has_method(&"apply_upgrade_level"):
+		var lvl := GameState.barracks_level
+		if _barracks.has_meta(&"barracks_level"):
+			lvl = int(_barracks.get_meta(&"barracks_level"))
+		apply_upgrade_level(lvl)
+
+
+func apply_upgrade_level(level: int) -> void:
+	upgrade_level = clampi(level, 1, 3)
+	var old_max := max_hp
+	var stat_mult := 2 if upgrade_level >= 2 else 1
+	max_hp = MAX_HP * stat_mult
+	melee_damage = MELEE_DAMAGE * stat_mult
+	if hp == old_max:
+		hp = max_hp
+	else:
+		hp = mini(max_hp, hp + max_hp - old_max)
+	scale = Vector3.ONE * (1.08 if upgrade_level >= 2 else 1.0)
+	_apply_level_visuals()
+	if _hp_bar != null and is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
+		_hp_bar.call(&"set_hp", hp, max_hp)
+
+
+func _apply_level_visuals() -> void:
+	var old := _avatar_root.get_node_or_null("WarriorLevelVisuals")
+	if old != null:
+		_avatar_root.remove_child(old)
+		old.free()
+	if upgrade_level < 2:
+		return
+	var root := Node3D.new()
+	root.name = &"WarriorLevelVisuals"
+	_avatar_root.add_child(root)
+	_add_level_box(root, Vector3(-0.24, 0.76, 0.0), Vector3(0.16, 0.1, 0.18), Color(0.72, 0.64, 0.34))
+	_add_level_box(root, Vector3(0.24, 0.76, 0.0), Vector3(0.16, 0.1, 0.18), Color(0.72, 0.64, 0.34))
+	_add_level_box(root, Vector3(0.0, 1.09, 0.0), Vector3(0.22, 0.08, 0.22), Color(0.78, 0.68, 0.22))
+	_add_level_box(root, Vector3(0.0, 0.58, 0.115), Vector3(0.22, 0.34, 0.035), Color(0.62, 0.12, 0.09))
+
+
+func _add_level_box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
+	var mesh_i := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh_i.mesh = mesh
+	mesh_i.position = pos
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.58
+	mesh_i.set_surface_override_material(0, mat)
+	parent.add_child(mesh_i)
 
 
 func _build_shield(arm: Node3D) -> void:
@@ -196,7 +248,7 @@ func _physics_process(delta: float) -> void:
 			if _attack_cd <= 0.0 and tgt.has_method(&"apply_sword_hit"):
 				_attack_cd = ATTACK_INTERVAL
 				SoundManager.play_one_shot(SoundManager.KEY_SWORD_SWING, 0.14, -4.0)
-				tgt.call(&"apply_sword_hit", MELEE_DAMAGE)
+				tgt.call(&"apply_sword_hit", melee_damage)
 	else:
 		var to_r := rally - global_position
 		to_r.y = 0.0

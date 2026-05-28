@@ -13,7 +13,7 @@ const CLIMB_BLOCKER_HEIGHT := 8.0
 const WORK_ANCHOR_Z := CLIMB_BLOCKER_RADIUS + 0.8
 
 const ORE_PER_HIT := 10
-const MINE_ORE_MAX := 5000
+const MINE_ORE_MAX := 8000
 
 const BAR_WIDTH := 2.8
 const BAR_HEIGHT := 0.22

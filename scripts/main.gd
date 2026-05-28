@@ -7,14 +7,24 @@ const _WaveManagerScript := preload("res://scripts/wave_manager.gd")
 const _BaseWorldHpScript := preload("res://scripts/base_world_hp.gd")
 const _PauseEscListenerScript := preload("res://scripts/pause_menu_esc_listener.gd")
 
-## «Крепость Строндолт» (Suno), трек из шаринга пользователя.
+const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
 const _BG_MUSIC_PATH := "res://assets/music/krepost_strondolt.mp3"
+const MUSIC_FADE_SEC := 1.4
+const RESOLUTIONS := [
+	["4K", Vector2i(3840, 2160)],
+	["2K", Vector2i(2560, 1440)],
+	["Full HD", Vector2i(1920, 1080)],
+	["HD", Vector2i(1280, 720)],
+]
+
 ## Отступ сундука от маркера спавна игрока (~14, 0, 0).
 const PLAYER_SPAWN_CHEST_CLEAR := 5.0
 const MAP_RANDOM_HALF := 112.0
+const ENDLESS_MAP_SCALE := 2.0
 const RANDOM_MINE_COUNT := 2
 const RANDOM_TREE_COUNT := 25
 const RANDOM_ROCK_COUNT := 25
+const ENDLESS_BREAKABLE_MULTIPLIER := 3
 const MINE_CLEAR_RADIUS := 15.0
 const BREAKABLE_CLEAR_RADIUS := 4.6
 
@@ -29,13 +39,17 @@ var _tower_button: Button
 var _barracks_button: Button
 var _warehouse_button: Button
 var _dmg_upgrade_button: Button
-var _storage_ore_label: Label
-var _sell_button: Button
+var _tower_upgrade_button: Button
+var _barracks_upgrade_button: Button
+var _wood_label: Label
+var _market_buttons: Array[Button] = []
 var _buy_worker_button: Button
+var _buy_woodcutter_button: Button
 var _worker_timer_label: Label
 
 var _worker_spawn_pending := false
 var _worker_spawn_time_left := 0.0
+var _pending_worker_role := "miner"
 
 var _dev_console_layer: CanvasLayer
 var _dev_line: LineEdit
@@ -55,12 +69,15 @@ var _pause_menu_layer: CanvasLayer
 var _bg_music_player: AudioStreamPlayer
 var _music_volume_slider: HSlider
 var _sound_volume_slider: HSlider
+var _resolution_option: OptionButton
+var _fullscreen_check: CheckBox
 var _pause_menu_open: bool = false
 
 
 func _ready() -> void:
 	randomize()
 	add_to_group("main_world")
+	_apply_map_scale()
 	var wm := Node.new()
 	wm.set_script(_WaveManagerScript)
 	wm.name = "WaveManager"
@@ -90,9 +107,11 @@ func _ready() -> void:
 	_setup_hud_style()
 	GameState.coins_changed.connect(_on_coins_changed)
 	GameState.ore_changed.connect(_on_ore_changed)
+	GameState.wood_changed.connect(_on_wood_changed)
 	GameState.base_hp_changed.connect(_on_base_hp_changed)
 	GameState.commander_mode_changed.connect(_on_commander_mode)
 	GameState.pending_build_changed.connect(_on_pending_build)
+	GameState.building_levels_changed.connect(_refresh_upgrade_buttons)
 	_on_coins_changed(GameState.coins)
 	_refresh_ore_labels()
 	_on_base_hp_changed(GameState.base_hp, GameState.BASE_MAX_HP)
@@ -100,15 +119,53 @@ func _ready() -> void:
 	call_deferred(&"_spawn_secret_chest_random")
 
 
+func _apply_map_scale() -> void:
+	if GameState.game_mode != GameState.GAME_MODE_ENDLESS:
+		return
+	var ground := get_node_or_null("Ground")
+	if ground == null:
+		return
+	ground.scale.x = ENDLESS_MAP_SCALE
+	ground.scale.z = ENDLESS_MAP_SCALE
+
+
+func _setup_background_music() -> void:
+	if not ResourceLoader.exists(_BG_MUSIC_PATH):
+		push_warning("Background music not found: %s" % _BG_MUSIC_PATH)
+		return
+	var stream: AudioStream = load(_BG_MUSIC_PATH) as AudioStream
+	if stream == null:
+		return
+	if stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = true
+	elif stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = true
+	var bgm := AudioStreamPlayer.new()
+	bgm.name = "BackgroundMusic"
+	bgm.stream = stream
+	bgm.volume_db = -80.0
+	bgm.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(bgm)
+	bgm.play()
+	_bg_music_player = bgm
+	create_tween().tween_property(bgm, "volume_db", -22.0, MUSIC_FADE_SEC)
+
+
 func _setup_hud_style() -> void:
 	var cl: CanvasLayer = $CanvasLayer
+	_wood_label = Label.new()
+	_wood_label.name = &"WoodLabel"
+	_wood_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wood_label.focus_mode = Control.FOCUS_NONE
+	cl.add_child(_wood_label)
+
 	var panel := PanelContainer.new()
 	panel.name = &"TopHudPanel"
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.offset_left = 10.0
 	panel.offset_top = 8.0
-	panel.offset_right = 358.0
-	panel.offset_bottom = 62.0
+	panel.offset_right = 520.0
+	panel.offset_bottom = 82.0
 	panel.add_theme_stylebox_override(&"panel", UiStyle.panel_style(UiStyle.PANEL_BG_SOFT, UiStyle.PANEL_BORDER_DIM, 9, 1))
 	cl.add_child(panel)
 	cl.move_child(panel, 0)
@@ -121,13 +178,18 @@ func _setup_hud_style() -> void:
 	_ore_label.offset_top = 9.0
 	_ore_label.offset_right = 350.0
 	_ore_label.offset_bottom = 32.0
+	_wood_label.offset_left = 18.0
+	_wood_label.offset_top = 32.0
+	_wood_label.offset_right = 220.0
+	_wood_label.offset_bottom = 56.0
 	_base_hp_label.offset_left = 18.0
-	_base_hp_label.offset_top = 32.0
+	_base_hp_label.offset_top = 56.0
 	_base_hp_label.offset_right = 350.0
-	_base_hp_label.offset_bottom = 56.0
+	_base_hp_label.offset_bottom = 80.0
 
 	UiStyle.style_label(_coin_label, UiStyle.TEXT_COIN, 16, 3)
 	UiStyle.style_label(_ore_label, UiStyle.TEXT_ORE, 16, 3)
+	UiStyle.style_label(_wood_label, Color(0.72, 0.42, 0.16), 16, 3)
 	UiStyle.style_label(_base_hp_label, UiStyle.TEXT_HP, 15, 3)
 
 
@@ -144,12 +206,13 @@ func _randomize_map_resources() -> void:
 		_add_reserved_area(occupied, pos, MINE_CLEAR_RADIUS)
 		_spawn_random_mine(i, pos)
 
-	for i in range(RANDOM_TREE_COUNT):
+	var breakable_mul := ENDLESS_BREAKABLE_MULTIPLIER if GameState.game_mode == GameState.GAME_MODE_ENDLESS else 1
+	for i in range(RANDOM_TREE_COUNT * breakable_mul):
 		var tree_pos := _pick_random_map_position(occupied, BREAKABLE_CLEAR_RADIUS)
 		_add_reserved_area(occupied, tree_pos, BREAKABLE_CLEAR_RADIUS)
 		_spawn_random_breakable(i, tree_pos, true)
 
-	for i in range(RANDOM_ROCK_COUNT):
+	for i in range(RANDOM_ROCK_COUNT * breakable_mul):
 		var rock_pos := _pick_random_map_position(occupied, BREAKABLE_CLEAR_RADIUS)
 		_add_reserved_area(occupied, rock_pos, BREAKABLE_CLEAR_RADIUS)
 		_spawn_random_breakable(i, rock_pos, false)
@@ -177,6 +240,8 @@ func _spawn_random_breakable(index: int, pos: Vector3, is_tree: bool) -> void:
 	obj.set(&"is_tree", is_tree)
 	if is_tree:
 		obj.set(&"tree_variant", index % 4)
+	else:
+		obj.set(&"rock_variant", index % 4)
 	obj.global_position = pos
 	obj.rotation.y = randf() * TAU
 	add_child(obj)
@@ -191,12 +256,14 @@ func _add_reserved_area(occupied: Array, pos: Vector3, radius: float) -> void:
 
 func _pick_random_map_position(occupied: Array, radius: float) -> Vector3:
 	for _i in range(256):
-		var x := randf_range(-MAP_RANDOM_HALF, MAP_RANDOM_HALF)
-		var z := randf_range(-MAP_RANDOM_HALF, MAP_RANDOM_HALF)
+		var half := MAP_RANDOM_HALF * GameState.get_map_scale()
+		var x := randf_range(-half, half)
+		var z := randf_range(-half, half)
 		var p := Vector2(x, z)
 		if _is_random_position_clear(p, radius, occupied):
 			return Vector3(x, 0.0, z)
-	return Vector3(randf_range(-MAP_RANDOM_HALF, MAP_RANDOM_HALF), 0.0, randf_range(-MAP_RANDOM_HALF, MAP_RANDOM_HALF))
+	var half := MAP_RANDOM_HALF * GameState.get_map_scale()
+	return Vector3(randf_range(-half, half), 0.0, randf_range(-half, half))
 
 
 func _is_random_position_clear(p: Vector2, radius: float, occupied: Array) -> bool:
@@ -236,34 +303,13 @@ func _pick_random_chest_position() -> Vector3:
 	return Vector3(62.0, 0.0, -58.0)
 
 
-func _setup_background_music() -> void:
-	if not ResourceLoader.exists(_BG_MUSIC_PATH):
-		push_warning("Фоновая музыка не найдена: %s" % _BG_MUSIC_PATH)
-		return
-	var stream: AudioStream = load(_BG_MUSIC_PATH) as AudioStream
-	if stream == null:
-		return
-	if stream is AudioStreamMP3:
-		(stream as AudioStreamMP3).loop = true
-	elif stream is AudioStreamOggVorbis:
-		(stream as AudioStreamOggVorbis).loop = true
-	var bgm := AudioStreamPlayer.new()
-	bgm.name = "BackgroundMusic"
-	bgm.stream = stream
-	bgm.volume_db = -22.0
-	bgm.process_mode = Node.PROCESS_MODE_ALWAYS
-	add_child(bgm)
-	bgm.play()
-	_bg_music_player = bgm
-
-
 func _process(delta: float) -> void:
 	if _worker_spawn_pending:
 		_worker_spawn_time_left -= delta
 		_refresh_workers_ui()
 		if _worker_spawn_time_left <= 0.0:
 			_worker_spawn_pending = false
-			_spawn_worker()
+			_spawn_worker(_pending_worker_role)
 			_refresh_workers_ui()
 	_update_wave_countdown_label()
 	_try_show_victory()
@@ -297,10 +343,10 @@ func _update_wave_countdown_label() -> void:
 	_wave_countdown_label.text = wm.call(&"get_wave_timer_hud_text") as String
 
 
-func _spawn_worker() -> void:
+func _spawn_worker(role: String = "miner") -> void:
 	var inst: Node = _WorkerScene.instantiate()
 	if inst.has_method(&"setup"):
-		inst.call(&"setup", _ore_deposit.global_position)
+		inst.call(&"setup", _ore_deposit.global_position, role)
 	add_child(inst)
 	inst.global_position = _worker_spawn.global_position
 
@@ -329,7 +375,7 @@ func _setup_commander_build_ui() -> void:
 	bar.add_child(tabs)
 
 	var build_tab := MarginContainer.new()
-	build_tab.name = "Постройки"
+	build_tab.name = "Build"
 	build_tab.add_theme_constant_override("margin_left", 6)
 	build_tab.add_theme_constant_override("margin_top", 4)
 	build_tab.add_theme_constant_override("margin_right", 6)
@@ -343,7 +389,7 @@ func _setup_commander_build_ui() -> void:
 	_tower_button = Button.new()
 	_tower_button.focus_mode = Control.FOCUS_NONE
 	_tower_button.custom_minimum_size = Vector2(118, 96)
-	_tower_button.text = "TOWER\n🏰\nCOST: 10"
+	_tower_button.text = "TOWER\n🏰\n%d ore\n%d wood" % [GameState.TOWER_ORE_COST, GameState.TOWER_WOOD_COST]
 	_tower_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UiStyle.style_button(_tower_button, 15)
 	_tower_button.pressed.connect(_on_tower_button_pressed)
@@ -352,20 +398,20 @@ func _setup_commander_build_ui() -> void:
 	_barracks_button = Button.new()
 	_barracks_button.focus_mode = Control.FOCUS_NONE
 	_barracks_button.custom_minimum_size = Vector2(128, 96)
-	_barracks_button.text = "BARRACKS\n🛖\n%d монет" % GameState.BARRACKS_COST
+	_barracks_button.text = "BARRACKS\n🛖\n%d ore\n%d wood" % [GameState.BARRACKS_ORE_COST, GameState.BARRACKS_WOOD_COST]
 	_barracks_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UiStyle.style_button(_barracks_button, 14)
-	_barracks_button.tooltip_text = "До 4 воинов; после гибели новый через 10 с."
+	_barracks_button.tooltip_text = "Up to 4 warriors; each respawns 10 s after death."
 	_barracks_button.pressed.connect(_on_barracks_button_pressed)
 	row_build.add_child(_barracks_button)
 
 	_warehouse_button = Button.new()
 	_warehouse_button.focus_mode = Control.FOCUS_NONE
 	_warehouse_button.custom_minimum_size = Vector2(118, 96)
-	_warehouse_button.text = "WAREHOUSE\n📦\n%d монет" % GameState.WAREHOUSE_COST
+	_warehouse_button.text = "WAREHOUSE\n📦\n%d ore\n%d wood" % [GameState.WAREHOUSE_ORE_COST, GameState.WAREHOUSE_WOOD_COST]
 	_warehouse_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UiStyle.style_button(_warehouse_button, 13)
-	_warehouse_button.tooltip_text = "Если склад ближе базы, рабочий несёт руду сюда; счёт руды общий."
+	_warehouse_button.tooltip_text = "Workers unload at the nearest warehouse or base; storage is shared."
 	_warehouse_button.pressed.connect(_on_warehouse_button_pressed)
 	row_build.add_child(_warehouse_button)
 
@@ -384,38 +430,56 @@ func _setup_commander_build_ui() -> void:
 	_dmg_upgrade_button = Button.new()
 	_dmg_upgrade_button.focus_mode = Control.FOCUS_NONE
 	_dmg_upgrade_button.custom_minimum_size = Vector2(112, 96)
-	_dmg_upgrade_button.text = "DMG\n+10\n5 монет"
+	_dmg_upgrade_button.text = "🗡️ 🔼\nDMG +10\n5 coins"
 	_dmg_upgrade_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UiStyle.style_button(_dmg_upgrade_button, 14)
-	_dmg_upgrade_button.tooltip_text = "Урон меча по деревьям и камням: +10 за удар. По врагам урон без улучшений."
+	_dmg_upgrade_button.tooltip_text = "Sword damage vs trees and rocks: +10 per hit. Enemy damage is unchanged."
 	_dmg_upgrade_button.pressed.connect(_on_dmg_upgrade_pressed)
 	row_up.add_child(_dmg_upgrade_button)
 
-	var storage_tab := MarginContainer.new()
-	storage_tab.name = "Storage"
-	storage_tab.add_theme_constant_override("margin_left", 6)
-	storage_tab.add_theme_constant_override("margin_top", 4)
-	storage_tab.add_theme_constant_override("margin_right", 6)
-	storage_tab.add_theme_constant_override("margin_bottom", 6)
-	tabs.add_child(storage_tab)
+	_tower_upgrade_button = Button.new()
+	_tower_upgrade_button.focus_mode = Control.FOCUS_NONE
+	_tower_upgrade_button.custom_minimum_size = Vector2(132, 96)
+	_tower_upgrade_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_tower_upgrade_button, 13)
+	_tower_upgrade_button.tooltip_text = "Globally upgrades all towers: range, fire rate, and damage."
+	_tower_upgrade_button.pressed.connect(_on_tower_upgrade_pressed)
+	row_up.add_child(_tower_upgrade_button)
 
-	var storage_col := VBoxContainer.new()
-	storage_col.add_theme_constant_override("separation", 10)
-	storage_tab.add_child(storage_col)
+	_barracks_upgrade_button = Button.new()
+	_barracks_upgrade_button.focus_mode = Control.FOCUS_NONE
+	_barracks_upgrade_button.custom_minimum_size = Vector2(132, 96)
+	_barracks_upgrade_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_barracks_upgrade_button, 13)
+	_barracks_upgrade_button.tooltip_text = "Globally upgrades all barracks and warriors."
+	_barracks_upgrade_button.pressed.connect(_on_barracks_upgrade_pressed)
+	row_up.add_child(_barracks_upgrade_button)
 
-	_storage_ore_label = Label.new()
-	_storage_ore_label.text = "Руда: 0"
-	UiStyle.style_label(_storage_ore_label, UiStyle.TEXT_ORE, 18, 3)
-	storage_col.add_child(_storage_ore_label)
+	var market_tab := MarginContainer.new()
+	market_tab.name = "Market"
+	market_tab.add_theme_constant_override("margin_left", 6)
+	market_tab.add_theme_constant_override("margin_top", 4)
+	market_tab.add_theme_constant_override("margin_right", 6)
+	market_tab.add_theme_constant_override("margin_bottom", 6)
+	tabs.add_child(market_tab)
 
-	_sell_button = Button.new()
-	_sell_button.focus_mode = Control.FOCUS_NONE
-	_sell_button.text = "Продать"
-	_sell_button.custom_minimum_size = Vector2(200, 44)
-	_sell_button.tooltip_text = "100 руды = 1 монета. Доступно только на базе."
-	UiStyle.style_button(_sell_button, 17)
-	_sell_button.pressed.connect(_on_sell_ore_pressed)
-	storage_col.add_child(_sell_button)
+	var market_scroll := ScrollContainer.new()
+	market_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	market_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	market_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	market_tab.add_child(market_scroll)
+
+	var market_col := VBoxContainer.new()
+	market_col.add_theme_constant_override("separation", 8)
+	market_scroll.add_child(market_col)
+	_add_market_button(market_col, "1 coin -> 5 wood", -1, 5, 0)
+	_add_market_button(market_col, "10 coins -> 50 wood", -10, 50, 0)
+	_add_market_button(market_col, "10 wood -> 1 coin", 1, -10, 0)
+	_add_market_button(market_col, "50 wood -> 5 coins", 5, -50, 0)
+	_add_market_button(market_col, "1 coin -> 50 ore", -1, 0, 50)
+	_add_market_button(market_col, "10 coins -> 500 ore", -10, 0, 500)
+	_add_market_button(market_col, "100 ore -> 1 coin", 1, 0, -100)
+	_add_market_button(market_col, "500 ore -> 5 coins", 5, 0, -500)
 
 	var workers_tab := MarginContainer.new()
 	workers_tab.name = "Workers"
@@ -430,24 +494,39 @@ func _setup_commander_build_ui() -> void:
 	workers_tab.add_child(workers_col)
 
 	_worker_timer_label = Label.new()
-	_worker_timer_label.text = "Нет заказа на рабочего"
+	_worker_timer_label.text = "No worker order"
 	UiStyle.style_label(_worker_timer_label, UiStyle.TEXT_MUTED, 16, 3)
 	workers_col.add_child(_worker_timer_label)
 
+	var worker_buttons_row := HBoxContainer.new()
+	worker_buttons_row.add_theme_constant_override("separation", 10)
+	workers_col.add_child(worker_buttons_row)
+
 	_buy_worker_button = Button.new()
 	_buy_worker_button.focus_mode = Control.FOCUS_NONE
-	_buy_worker_button.text = "Рабочий\n%d монет" % GameState.WORKER_COST
+	_buy_worker_button.text = "Miner\n%d coins" % GameState.WORKER_COST
 	_buy_worker_button.custom_minimum_size = Vector2(160, 88)
 	_buy_worker_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UiStyle.style_button(_buy_worker_button, 15)
-	_buy_worker_button.tooltip_text = "Появится через 5 с у базы. Пока не появится — второго заказать нельзя."
-	_buy_worker_button.pressed.connect(_on_buy_worker_pressed)
-	workers_col.add_child(_buy_worker_button)
+	_buy_worker_button.tooltip_text = "Mines ore and unloads it at the base or nearest warehouse."
+	_buy_worker_button.pressed.connect(_on_buy_miner_pressed)
+	worker_buttons_row.add_child(_buy_worker_button)
+
+	_buy_woodcutter_button = Button.new()
+	_buy_woodcutter_button.focus_mode = Control.FOCUS_NONE
+	_buy_woodcutter_button.text = "Woodcutter\n%d coins" % GameState.WORKER_COST
+	_buy_woodcutter_button.custom_minimum_size = Vector2(160, 88)
+	_buy_woodcutter_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_buy_woodcutter_button, 15)
+	_buy_woodcutter_button.tooltip_text = "Cuts the nearest tree, gains 10 wood, then unloads it at the base or warehouse."
+	_buy_woodcutter_button.pressed.connect(_on_buy_woodcutter_pressed)
+	worker_buttons_row.add_child(_buy_woodcutter_button)
 
 	bar.offset_top = -166.0
 	_on_coins_changed(GameState.coins)
 	_refresh_ore_labels()
 	_refresh_workers_ui()
+	_refresh_upgrade_buttons()
 
 
 func _on_tower_button_pressed() -> void:
@@ -464,19 +543,53 @@ func _on_warehouse_button_pressed() -> void:
 
 func _on_dmg_upgrade_pressed() -> void:
 	GameState.buy_dmg_upgrade()
+	_refresh_upgrade_buttons()
 
 
-func _on_sell_ore_pressed() -> void:
-	GameState.sell_ore_for_coins()
+func _on_tower_upgrade_pressed() -> void:
+	GameState.buy_tower_upgrade()
+	_refresh_upgrade_buttons()
 
 
-func _on_buy_worker_pressed() -> void:
+func _on_barracks_upgrade_pressed() -> void:
+	GameState.buy_barracks_upgrade()
+	_refresh_upgrade_buttons()
+
+
+func _add_market_button(parent: Node, text: String, coin_delta: int, wood_delta: int, ore_delta: int) -> void:
+	var btn := Button.new()
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.text = text
+	btn.custom_minimum_size = Vector2(260, 38)
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	UiStyle.style_button(btn, 16)
+	btn.pressed.connect(func() -> void:
+		GameState.try_market_trade(coin_delta, wood_delta, ore_delta)
+		_refresh_market_buttons()
+	)
+	parent.add_child(btn)
+	btn.set_meta(&"coin_delta", coin_delta)
+	btn.set_meta(&"wood_delta", wood_delta)
+	btn.set_meta(&"ore_delta", ore_delta)
+	_market_buttons.append(btn)
+
+
+func _on_buy_miner_pressed() -> void:
+	_start_worker_order("miner")
+
+
+func _on_buy_woodcutter_pressed() -> void:
+	_start_worker_order("woodcutter")
+
+
+func _start_worker_order(role: String) -> void:
 	if _worker_spawn_pending:
 		return
 	if GameState.coins < GameState.WORKER_COST:
 		return
 	if not GameState.spend_coins(GameState.WORKER_COST):
 		return
+	_pending_worker_role = role
 	_worker_spawn_pending = true
 	_worker_spawn_time_left = 5.0
 	_refresh_workers_ui()
@@ -485,44 +598,97 @@ func _on_buy_worker_pressed() -> void:
 func _refresh_workers_ui() -> void:
 	if _buy_worker_button == null or _worker_timer_label == null:
 		return
-	_buy_worker_button.text = "Рабочий\n%d монет" % GameState.WORKER_COST
+	_buy_worker_button.text = "Miner\n%d coins" % GameState.WORKER_COST
+	if _buy_woodcutter_button:
+		_buy_woodcutter_button.text = "Woodcutter\n%d coins" % GameState.WORKER_COST
 	if _worker_spawn_pending:
-		_worker_timer_label.text = "Появление рабочего: %.1f с" % maxf(_worker_spawn_time_left, 0.0)
+		_worker_timer_label.text = "Spawning %s: %.1f s" % [_pending_worker_role, maxf(_worker_spawn_time_left, 0.0)]
 		_buy_worker_button.disabled = true
+		if _buy_woodcutter_button:
+			_buy_woodcutter_button.disabled = true
 	else:
-		_worker_timer_label.text = "Нет заказа на рабочего"
+		_worker_timer_label.text = "No worker order"
 		_buy_worker_button.disabled = GameState.coins < GameState.WORKER_COST
+		if _buy_woodcutter_button:
+			_buy_woodcutter_button.disabled = GameState.coins < GameState.WORKER_COST
+
+
+func _refresh_upgrade_buttons() -> void:
+	if _tower_upgrade_button:
+		if GameState.tower_level >= 3:
+			_tower_upgrade_button.text = "🏰 🔼\nTOWER\nLVL 3\nMAX"
+			_tower_upgrade_button.disabled = true
+		else:
+			var tower_cost := GameState.get_tower_upgrade_cost()
+			var tower_ore := GameState.get_tower_upgrade_ore_cost()
+			_tower_upgrade_button.text = "🏰 🔼\nLVL %d -> %d\n%d coins\n%d ore" % [GameState.tower_level, GameState.tower_level + 1, tower_cost, tower_ore]
+			_tower_upgrade_button.disabled = GameState.coins < tower_cost or GameState.ore < tower_ore
+	if _barracks_upgrade_button:
+		if GameState.barracks_level >= 3:
+			_barracks_upgrade_button.text = "🛖 🔼\nBARRACKS\nLVL 3\nMAX"
+			_barracks_upgrade_button.disabled = true
+		else:
+			var barracks_cost := GameState.get_barracks_upgrade_cost()
+			var barracks_ore := GameState.get_barracks_upgrade_ore_cost()
+			_barracks_upgrade_button.text = "🛖 🔼\nLVL %d -> %d\n%d coins\n%d ore" % [GameState.barracks_level, GameState.barracks_level + 1, barracks_cost, barracks_ore]
+			_barracks_upgrade_button.disabled = GameState.coins < barracks_cost or GameState.ore < barracks_ore
+
+
+func _refresh_market_buttons() -> void:
+	for btn in _market_buttons:
+		if btn == null:
+			continue
+		var coin_delta := int(btn.get_meta(&"coin_delta", 0))
+		var wood_delta := int(btn.get_meta(&"wood_delta", 0))
+		var ore_delta := int(btn.get_meta(&"ore_delta", 0))
+		btn.disabled = (
+			GameState.coins + coin_delta < 0
+			or GameState.wood + wood_delta < 0
+			or GameState.ore + ore_delta < 0
+		)
+
+
+func _refresh_build_buttons() -> void:
+	if _tower_button:
+		_tower_button.disabled = not GameState.can_afford_build(GameState.BUILD_TOWER)
+	if _barracks_button:
+		_barracks_button.disabled = not GameState.can_afford_build(GameState.BUILD_BARRACKS)
+	if _warehouse_button:
+		_warehouse_button.disabled = not GameState.can_afford_build(GameState.BUILD_WAREHOUSE)
 
 
 func _refresh_ore_labels() -> void:
 	var o: int = GameState.ore
 	if _ore_label:
-		_ore_label.text = "Руда: %d" % o
-	if _storage_ore_label:
-		_storage_ore_label.text = "Руда: %d  (100 ед. = 1 монета)" % o
-	if _sell_button:
-		_sell_button.disabled = GameState.ore < GameState.ORE_PER_COIN
+		_ore_label.text = "Ore: %d" % o
+	if _wood_label:
+		_wood_label.text = "Wood: %d" % GameState.wood
+	_refresh_build_buttons()
+	_refresh_market_buttons()
+	_refresh_workers_ui()
 
 
 func _on_ore_changed(_total: int) -> void:
 	_refresh_ore_labels()
+	_refresh_upgrade_buttons()
+
+
+func _on_wood_changed(_total: int) -> void:
+	_refresh_ore_labels()
 
 
 func _on_base_hp_changed(current: int, maximum: int) -> void:
-	_base_hp_label.text = "База: %d / %d" % [current, maximum]
+	_base_hp_label.text = "Base: %d / %d" % [current, maximum]
 
 
 func _on_coins_changed(total: int) -> void:
-	_coin_label.text = "Монеты: %d" % total
-	if _tower_button:
-		_tower_button.disabled = total < GameState.TOWER_COST
-	if _barracks_button:
-		_barracks_button.disabled = total < GameState.BARRACKS_COST
-	if _warehouse_button:
-		_warehouse_button.disabled = total < GameState.WAREHOUSE_COST
+	_coin_label.text = "Coins: %d" % total
 	if _dmg_upgrade_button:
 		_dmg_upgrade_button.disabled = total < GameState.DMG_UPGRADE_COST
+	_refresh_build_buttons()
+	_refresh_upgrade_buttons()
 	_refresh_workers_ui()
+	_refresh_market_buttons()
 
 
 func _on_commander_mode(active: bool) -> void:
@@ -574,7 +740,7 @@ func _setup_game_over_ui() -> void:
 	center.add_child(box)
 
 	var title := Label.new()
-	title.text = "База уничтожена"
+	title.text = "Base destroyed"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UiStyle.style_label(title, UiStyle.TEXT_DANGER, 36, 7)
 	box.add_child(title)
@@ -699,7 +865,7 @@ func _setup_pause_menu() -> void:
 	_pause_menu_layer.add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(360, 0)
+	panel.custom_minimum_size = Vector2(420, 0)
 	panel.add_theme_stylebox_override(&"panel", UiStyle.panel_style())
 	center.add_child(panel)
 
@@ -708,7 +874,7 @@ func _setup_pause_menu() -> void:
 	panel.add_child(col)
 
 	var title := Label.new()
-	title.text = "Пауза"
+	title.text = "Paused"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UiStyle.style_label(title, UiStyle.TEXT_MAIN, 28, 5)
 	col.add_child(title)
@@ -718,7 +884,7 @@ func _setup_pause_menu() -> void:
 	col.add_child(vol_row)
 
 	var vol_lbl := Label.new()
-	vol_lbl.text = "Музыка"
+	vol_lbl.text = "Music"
 	UiStyle.style_label(vol_lbl, UiStyle.TEXT_MAIN, 16, 3)
 	vol_row.add_child(vol_lbl)
 
@@ -749,14 +915,45 @@ func _setup_pause_menu() -> void:
 	_sound_volume_slider.value_changed.connect(_on_sound_volume_slider_changed)
 	sound_row.add_child(_sound_volume_slider)
 
+	var res_row := HBoxContainer.new()
+	res_row.add_theme_constant_override("separation", 10)
+	col.add_child(res_row)
+
+	var res_lbl := Label.new()
+	res_lbl.text = "Resolution"
+	UiStyle.style_label(res_lbl, UiStyle.TEXT_MAIN, 16, 3)
+	res_row.add_child(res_lbl)
+
+	_resolution_option = OptionButton.new()
+	_resolution_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for i in RESOLUTIONS.size():
+		var item: Array = RESOLUTIONS[i]
+		var size: Vector2i = item[1]
+		_resolution_option.add_item("%s (%dx%d)" % [item[0], size.x, size.y], i)
+	_resolution_option.item_selected.connect(_on_resolution_selected)
+	res_row.add_child(_resolution_option)
+
+	_fullscreen_check = CheckBox.new()
+	_fullscreen_check.text = "Fullscreen"
+	_fullscreen_check.toggled.connect(_on_fullscreen_toggled)
+	col.add_child(_fullscreen_check)
+
 	var esc_hint := Label.new()
-	esc_hint.text = "Esc — закрыть меню"
+	esc_hint.text = "Esc - close menu"
 	esc_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UiStyle.style_label(esc_hint, UiStyle.TEXT_MUTED, 13, 2)
 	col.add_child(esc_hint)
 
+	var main_menu_btn := Button.new()
+	main_menu_btn.text = "Back to Main Menu"
+	main_menu_btn.custom_minimum_size = Vector2(0, 44)
+	main_menu_btn.focus_mode = Control.FOCUS_ALL
+	UiStyle.style_button(main_menu_btn, 18)
+	main_menu_btn.pressed.connect(_on_pause_main_menu_pressed)
+	col.add_child(main_menu_btn)
+
 	var quit_btn := Button.new()
-	quit_btn.text = "Выйти"
+	quit_btn.text = "Exit"
 	quit_btn.custom_minimum_size = Vector2(0, 44)
 	quit_btn.focus_mode = Control.FOCUS_ALL
 	UiStyle.style_button(quit_btn, 18)
@@ -797,6 +994,7 @@ func open_pause_menu() -> void:
 	_pause_menu_layer.visible = true
 	_sync_music_slider_from_player()
 	_sync_sound_slider_from_manager()
+	_refresh_video_settings()
 	if _music_volume_slider:
 		_music_volume_slider.grab_focus()
 
@@ -843,8 +1041,65 @@ func _on_sound_volume_slider_changed(value: float) -> void:
 	SoundManager.set_sfx_volume_slider_percent(value)
 
 
+func _refresh_video_settings() -> void:
+	var current_size := get_window().size
+	for i in RESOLUTIONS.size():
+		if RESOLUTIONS[i][1] == current_size:
+			_resolution_option.select(i)
+			break
+	_fullscreen_check.set_pressed_no_signal(_is_fullscreen())
+
+
+func _on_resolution_selected(index: int) -> void:
+	if index < 0 or index >= RESOLUTIONS.size():
+		return
+	var was_fullscreen := _is_fullscreen()
+	var window := get_window()
+	if was_fullscreen:
+		window.mode = Window.MODE_WINDOWED
+	var size: Vector2i = RESOLUTIONS[index][1]
+	window.content_scale_size = size
+	window.size = size
+	_center_window()
+	if was_fullscreen:
+		window.mode = Window.MODE_EXCLUSIVE_FULLSCREEN
+
+
+func _on_fullscreen_toggled(enabled: bool) -> void:
+	var window := get_window()
+	if enabled:
+		var index := _resolution_option.selected
+		if index >= 0 and index < RESOLUTIONS.size():
+			var size: Vector2i = RESOLUTIONS[index][1]
+			window.content_scale_size = size
+			window.size = size
+		window.mode = Window.MODE_EXCLUSIVE_FULLSCREEN
+	else:
+		window.mode = Window.MODE_WINDOWED
+		_center_window()
+
+
+func _is_fullscreen() -> bool:
+	var mode := get_window().mode
+	return mode == Window.MODE_FULLSCREEN or mode == Window.MODE_EXCLUSIVE_FULLSCREEN
+
+
+func _center_window() -> void:
+	var window := get_window()
+	var screen := window.current_screen
+	var screen_pos := DisplayServer.screen_get_position(screen)
+	var screen_size := DisplayServer.screen_get_size(screen)
+	window.position = screen_pos + (screen_size - window.size) / 2
+
+
 func _on_pause_quit_pressed() -> void:
 	get_tree().quit()
+
+
+func _on_pause_main_menu_pressed() -> void:
+	get_tree().paused = false
+	GameState.reset_run()
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 
 func _setup_dev_console() -> void:
@@ -867,7 +1122,7 @@ func _setup_dev_console() -> void:
 	panel.add_child(col)
 
 	var hint := Label.new()
-	hint.text = "T — открыть. Money:число  |  wave_skip — следующая волна  |  Esc — закрыть"
+	hint.text = "T - open. Money:number  |  wave_skip - next wave  |  Esc - close"
 	UiStyle.style_label(hint, UiStyle.TEXT_MUTED, 13, 2)
 	col.add_child(hint)
 

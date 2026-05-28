@@ -6,8 +6,12 @@ const _HumanoidAvatarBuilder := preload("res://scripts/humanoid_avatar_builder.g
 const SPEED := 6.0
 const GRAVITY := 30.0
 const MINE_REACH := 6.0
+const TREE_REACH := 2.2
 const BASE_REACH := 4.2
 const CARRY_CAP := 75
+const WOOD_CARRY_CAP := 10
+const ROLE_MINER := "miner"
+const ROLE_WOODCUTTER := "woodcutter"
 
 const MINE_HIT_INTERVAL := 0.55
 const SWING_OUT := 0.22
@@ -38,6 +42,7 @@ enum { GO_MINE, MINING, GO_BASE, UNLOAD, IDLE, DEAD }
 enum _Unstuck { NONE, JUMP_BURST, SIDE_STEP }
 
 var _state: int = GO_MINE
+var _role := ROLE_MINER
 var _carry: int = 0
 var _target_mine: Node = null
 var _deposit_global: Vector3 = Vector3.ZERO
@@ -76,25 +81,29 @@ var _arm_r: Node3D
 var _walk_phase := 0.0
 
 
-func setup(deposit_world: Vector3) -> void:
+func setup(deposit_world: Vector3, role: String = ROLE_MINER) -> void:
 	_deposit_global = deposit_world
+	_role = role
 
 
 func _ready() -> void:
 	add_to_group(&"worker")
+	if _is_woodcutter():
+		add_to_group(&"woodcutter")
+	else:
+		add_to_group(&"miner")
 	collision_layer = 32
 	collision_mask = DEFAULT_MASK
 	# Капсула: низ в y=0 тела; меш с scale 0.88 — чуть ниже нуля, поднимаем AvatarRoot (не как у героя с коробкой −0.46).
-	_HumanoidAvatarBuilder.build(
-		_avatar_root,
-		Color(0.92, 0.78, 0.12),
-		true,
-		AVATAR_SCALE,
-		0.08
-	)
+	var shirt := Color(1.0, 0.96, 0.9) if _is_woodcutter() else Color(0.92, 0.78, 0.12)
+	_HumanoidAvatarBuilder.build(_avatar_root, shirt, not _is_woodcutter(), AVATAR_SCALE, 0.08)
 	_cache_avatar_limbs()
 	_build_pickaxe()
 	_setup_hp_bar()
+
+
+func _is_woodcutter() -> bool:
+	return _role == ROLE_WOODCUTTER
 
 
 func _mine_outward_dir_xz(mine: Node) -> Vector2:
@@ -180,7 +189,7 @@ func clear_duel_from(enemy: Node) -> void:
 
 func _build_pickaxe() -> void:
 	_pickaxe_pivot = Node3D.new()
-	_pickaxe_pivot.name = &"PickaxePivot"
+	_pickaxe_pivot.name = &"ToolPivot"
 	if _arm_r != null:
 		_arm_r.add_child(_pickaxe_pivot)
 		_pickaxe_pivot.position = PICKAXE_HAND_POS
@@ -199,6 +208,21 @@ func _build_pickaxe() -> void:
 	hmat.roughness = 0.88
 	handle.set_surface_override_material(0, hmat)
 	_pickaxe_pivot.add_child(handle)
+
+	if _is_woodcutter():
+		var blade := MeshInstance3D.new()
+		var blade_mesh := BoxMesh.new()
+		blade_mesh.size = Vector3(0.28, 0.16, 0.08)
+		blade.mesh = blade_mesh
+		blade.position = Vector3(0.13, 0.16, 0.0)
+		blade.rotation_degrees.z = -18.0
+		var amat := StandardMaterial3D.new()
+		amat.albedo_color = Color(0.68, 0.7, 0.72)
+		amat.metallic = 0.55
+		amat.roughness = 0.36
+		blade.set_surface_override_material(0, amat)
+		_pickaxe_pivot.add_child(blade)
+		return
 
 	var head := MeshInstance3D.new()
 	var wedge := BoxMesh.new()
@@ -293,17 +317,17 @@ func _physics_process(delta: float) -> void:
 		GO_MINE:
 			collision_mask = DEFAULT_MASK
 			_stop_swing_visual()
-			_pick_nearest_mine()
+			_pick_nearest_resource()
 			if _target_mine == null:
 				_reset_stuck()
 				velocity.x = 0.0
 				velocity.z = 0.0
 				_state = IDLE
 			else:
-				var anchor: Vector3 = _target_mine.call(&"get_work_anchor_global") as Vector3
+				var anchor: Vector3 = _target_work_anchor()
 				var to_m := anchor - global_position
 				to_m.y = 0.0
-				if to_m.length() < MINE_REACH:
+				if to_m.length() < _work_reach():
 					_reset_stuck()
 					velocity.x = 0.0
 					velocity.z = 0.0
@@ -319,7 +343,7 @@ func _physics_process(delta: float) -> void:
 				else:
 					var dir := to_m.normalized()
 					var d_xz := Vector2(dir.x, dir.z)
-					if is_on_floor() and get_floor_angle() > STEEP_FLOOR_ANGLE and _target_mine != null:
+					if not _is_woodcutter() and is_on_floor() and get_floor_angle() > STEEP_FLOOR_ANGLE and _target_mine != null:
 						var out_xz := _mine_outward_dir_xz(_target_mine)
 						d_xz = d_xz.lerp(out_xz, 0.62).normalized()
 					velocity.x = d_xz.x * SPEED
@@ -334,13 +358,13 @@ func _physics_process(delta: float) -> void:
 				collision_mask = DEFAULT_MASK
 				_reset_stuck()
 				_state = GO_BASE if _carry > 0 else GO_MINE
-			elif int(_target_mine.call(&"get_ore_remaining")) <= 0:
+			elif _target_resource_remaining() <= 0:
 				_target_mine = null
 				collision_mask = DEFAULT_MASK
 				_reset_stuck()
 				_state = GO_BASE if _carry > 0 else GO_MINE
 			else:
-				var anchor2: Vector3 = _target_mine.call(&"get_work_anchor_global") as Vector3
+				var anchor2: Vector3 = _target_work_anchor()
 				look_at(Vector3(anchor2.x, global_position.y, anchor2.z), Vector3.UP)
 				velocity.x = 0.0
 				velocity.z = 0.0
@@ -372,12 +396,12 @@ func _physics_process(delta: float) -> void:
 					_cooldown -= delta
 					if _pickaxe_pivot:
 						_pickaxe_pivot.rotation_degrees = PICKAXE_REST_ROT_DEG
-					if _cooldown <= 0.0 and _carry < CARRY_CAP:
+					if _cooldown <= 0.0 and _carry < _carry_capacity():
 						_swinging = true
 						_swing_elapsed = 0.0
 						_strike_applied = false
 
-				if _carry >= CARRY_CAP:
+				if _carry >= _carry_capacity():
 					collision_mask = DEFAULT_MASK
 					_stop_swing_visual()
 					_reset_stuck()
@@ -406,8 +430,12 @@ func _physics_process(delta: float) -> void:
 			collision_mask = DEFAULT_MASK
 			_stop_swing_visual()
 			if _carry > 0:
-				FeedbackFx.show_ore_gain(get_parent(), global_position + Vector3(0.0, 1.55, 0.0), _carry)
-				GameState.add_ore(_carry)
+				if _is_woodcutter():
+					FeedbackFx.show_wood_gain(get_parent(), global_position + Vector3(0.0, 1.55, 0.0), _carry)
+					GameState.add_wood(_carry)
+				else:
+					FeedbackFx.show_ore_gain(get_parent(), global_position + Vector3(0.0, 1.55, 0.0), _carry)
+					GameState.add_ore(_carry)
 			_carry = 0
 			_unload_warehouse = null
 			_state = GO_MINE
@@ -418,7 +446,7 @@ func _physics_process(delta: float) -> void:
 			_reset_stuck()
 			velocity.x = 0.0
 			velocity.z = 0.0
-			_pick_nearest_mine()
+			_pick_nearest_resource()
 			if _target_mine != null:
 				_state = GO_MINE
 
@@ -506,12 +534,17 @@ func _begin_side_step(toward_xz: Vector3) -> void:
 func _do_pickaxe_strike() -> void:
 	if _target_mine == null or not is_instance_valid(_target_mine):
 		return
-	var space_left: int = CARRY_CAP - _carry
+	var space_left: int = _carry_capacity() - _carry
 	if space_left <= 0:
 		return
+	if _is_woodcutter():
+		if _target_mine.has_method(&"try_chop_worker_hit"):
+			_carry += int(_target_mine.call(&"try_chop_worker_hit", 10))
+		return
 	var want: int = mini(10, space_left)
-	var got: int = int(_target_mine.call(&"try_extract_worker_batch", want))
-	_carry += got
+	if _target_mine.has_method(&"try_extract_worker_batch"):
+		var got: int = int(_target_mine.call(&"try_extract_worker_batch", want))
+		_carry += got
 
 
 func _stop_swing_visual() -> void:
@@ -542,6 +575,41 @@ func _update_worker_walk_anim(delta: float) -> void:
 	_arm_r.rotation.x = lerpf(_arm_r.rotation.x, arm_r_tgt, n)
 
 
+func _carry_capacity() -> int:
+	return WOOD_CARRY_CAP if _is_woodcutter() else CARRY_CAP
+
+
+func _work_reach() -> float:
+	return TREE_REACH if _is_woodcutter() else MINE_REACH
+
+
+func _target_work_anchor() -> Vector3:
+	if _target_mine != null and is_instance_valid(_target_mine) and _target_mine.has_method(&"get_work_anchor_global"):
+		return _target_mine.call(&"get_work_anchor_global") as Vector3
+	if _target_mine is Node3D:
+		return (_target_mine as Node3D).global_position
+	return global_position
+
+
+func _target_resource_remaining() -> int:
+	if _target_mine == null or not is_instance_valid(_target_mine):
+		return 0
+	if _is_woodcutter():
+		if _target_mine.has_method(&"get_wood_remaining"):
+			return int(_target_mine.call(&"get_wood_remaining"))
+		return 0
+	if _target_mine.has_method(&"get_ore_remaining"):
+		return int(_target_mine.call(&"get_ore_remaining"))
+	return 0
+
+
+func _pick_nearest_resource() -> void:
+	if _is_woodcutter():
+		_pick_nearest_tree()
+	else:
+		_pick_nearest_mine()
+
+
 func _pick_nearest_mine() -> void:
 	var best: Node = null
 	var best_route := INF
@@ -554,6 +622,26 @@ func _pick_nearest_mine() -> void:
 			continue
 		var mine_node := n as Node3D
 		var anchor: Vector3 = mine_node.global_position
+		if n.has_method(&"get_work_anchor_global"):
+			anchor = n.call(&"get_work_anchor_global") as Vector3
+		var unload := _nearest_unload_for_point(anchor)
+		var route := global_position.distance_to(anchor) + anchor.distance_to(unload)
+		if route < best_route:
+			best_route = route
+			best = n
+	_target_mine = best
+
+
+func _pick_nearest_tree() -> void:
+	var best: Node = null
+	var best_route := INF
+	for n in get_tree().get_nodes_in_group(&"tree"):
+		if n == null or not is_instance_valid(n):
+			continue
+		if not n.has_method(&"get_wood_remaining") or int(n.call(&"get_wood_remaining")) <= 0:
+			continue
+		var tree_node := n as Node3D
+		var anchor: Vector3 = tree_node.global_position
 		if n.has_method(&"get_work_anchor_global"):
 			anchor = n.call(&"get_work_anchor_global") as Vector3
 		var unload := _nearest_unload_for_point(anchor)

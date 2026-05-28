@@ -56,6 +56,7 @@ var _commander_dragging := false
 var _commander_drag_anchor: Variant = null
 var _commander_rotating := false
 var _build_preview: Node3D = null
+var _tower_range_preview: MeshInstance3D = null
 var _build_preview_type: int = GameState.BUILD_NONE
 var _build_preview_valid := false
 var _saved_collision_layer: int = 2
@@ -145,6 +146,49 @@ func _setup_avatar_visual() -> void:
 	_leg_r = _avatar_root.get_node_or_null("LegR") as Node3D
 	_arm_l = _avatar_root.get_node_or_null("ArmL") as Node3D
 	_arm_r = _avatar_root.get_node_or_null("ArmR") as Node3D
+	_add_hero_regalia()
+
+
+func _add_hero_regalia() -> void:
+	var crown_mat := StandardMaterial3D.new()
+	crown_mat.albedo_color = Color(0.95, 0.74, 0.18)
+	crown_mat.metallic = 0.35
+	crown_mat.roughness = 0.32
+
+	var crown := MeshInstance3D.new()
+	crown.name = &"HeroCrown"
+	var crown_mesh := CylinderMesh.new()
+	crown_mesh.top_radius = 0.14
+	crown_mesh.bottom_radius = 0.16
+	crown_mesh.height = 0.08
+	crown_mesh.radial_segments = 8
+	crown.mesh = crown_mesh
+	crown.position = Vector3(0.0, 1.095, 0.0)
+	crown.set_surface_override_material(0, crown_mat)
+	_avatar_root.add_child(crown)
+
+	for i in range(4):
+		var spike := MeshInstance3D.new()
+		var spike_mesh := BoxMesh.new()
+		spike_mesh.size = Vector3(0.035, 0.08, 0.035)
+		spike.mesh = spike_mesh
+		var angle := TAU * float(i) / 4.0
+		spike.position = crown.position + Vector3(cos(angle) * 0.105, 0.06, sin(angle) * 0.105)
+		spike.set_surface_override_material(0, crown_mat)
+		_avatar_root.add_child(spike)
+
+	var cape := MeshInstance3D.new()
+	cape.name = &"HeroCape"
+	var cape_mesh := BoxMesh.new()
+	cape_mesh.size = Vector3(0.44, 0.7, 0.035)
+	cape.mesh = cape_mesh
+	cape.position = Vector3(0.0, 0.5, 0.13)
+	cape.rotation_degrees.x = -8.0
+	var cape_mat := StandardMaterial3D.new()
+	cape_mat.albedo_color = Color(0.55, 0.05, 0.08)
+	cape_mat.roughness = 0.72
+	cape.set_surface_override_material(0, cape_mat)
+	_avatar_root.add_child(cape)
 
 
 func _update_walk_animation(delta: float) -> void:
@@ -614,8 +658,9 @@ func _update_commander_camera(delta: float) -> void:
 
 
 func _clamp_commander_focus() -> void:
-	_commander_focus.x = clampf(_commander_focus.x, -COMMANDER_FOCUS_CLAMP, COMMANDER_FOCUS_CLAMP)
-	_commander_focus.z = clampf(_commander_focus.z, -COMMANDER_FOCUS_CLAMP, COMMANDER_FOCUS_CLAMP)
+	var limit := COMMANDER_FOCUS_CLAMP * GameState.get_map_scale()
+	_commander_focus.x = clampf(_commander_focus.x, -limit, limit)
+	_commander_focus.z = clampf(_commander_focus.z, -limit, limit)
 
 
 func _update_build_preview() -> void:
@@ -630,6 +675,8 @@ func _update_build_preview() -> void:
 	if hit == null:
 		if _build_preview:
 			_build_preview.visible = false
+		if _tower_range_preview:
+			_tower_range_preview.visible = false
 		_build_preview_valid = false
 		return
 
@@ -639,15 +686,16 @@ func _update_build_preview() -> void:
 	_build_preview_valid = GameState.can_place_build_at(pos)
 	var tint := Color(0.15, 1.0, 0.22, 0.48) if _build_preview_valid else Color(1.0, 0.08, 0.04, 0.5)
 	_tint_build_preview(tint)
+	_update_tower_range_preview(pos, tint)
 
 
 func _create_build_preview(build_type: int) -> void:
 	_clear_build_preview()
 	match build_type:
 		GameState.BUILD_TOWER:
-			_build_preview = _TowerFactory.create_tower()
+			_build_preview = _TowerFactory.create_tower(GameState.tower_level)
 		GameState.BUILD_BARRACKS:
-			_build_preview = _BarracksFactory.create_barracks()
+			_build_preview = _BarracksFactory.create_barracks(GameState.barracks_level)
 		GameState.BUILD_WAREHOUSE:
 			_build_preview = _WarehouseFactory.create_warehouse()
 		_:
@@ -659,14 +707,55 @@ func _create_build_preview(build_type: int) -> void:
 	_build_preview.collision_mask = 0
 	_disable_preview_collisions(_build_preview)
 	get_parent().add_child(_build_preview)
+	if build_type == GameState.BUILD_TOWER:
+		_create_tower_range_preview()
 
 
 func _clear_build_preview() -> void:
 	if _build_preview != null and is_instance_valid(_build_preview):
 		_build_preview.queue_free()
+	if _tower_range_preview != null and is_instance_valid(_tower_range_preview):
+		_tower_range_preview.queue_free()
 	_build_preview = null
+	_tower_range_preview = null
 	_build_preview_type = GameState.BUILD_NONE
 	_build_preview_valid = false
+
+
+func _create_tower_range_preview() -> void:
+	if _tower_range_preview != null and is_instance_valid(_tower_range_preview):
+		return
+	_tower_range_preview = MeshInstance3D.new()
+	_tower_range_preview.name = &"TowerRangePreview"
+	_tower_range_preview.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mesh := CylinderMesh.new()
+	var range := 28.0
+	mesh.top_radius = range
+	mesh.bottom_radius = range
+	mesh.height = 0.035
+	mesh.radial_segments = 96
+	_tower_range_preview.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(0.3, 0.9, 0.35, 0.16)
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_tower_range_preview.set_surface_override_material(0, mat)
+	get_parent().add_child(_tower_range_preview)
+
+
+func _update_tower_range_preview(pos: Vector3, tint: Color) -> void:
+	if _build_preview_type != GameState.BUILD_TOWER:
+		if _tower_range_preview != null:
+			_tower_range_preview.visible = false
+		return
+	if _tower_range_preview == null:
+		_create_tower_range_preview()
+	_tower_range_preview.visible = _build_preview != null and _build_preview.visible
+	_tower_range_preview.global_position = Vector3(pos.x, pos.y + 0.04, pos.z)
+	var mat := _tower_range_preview.get_surface_override_material(0) as StandardMaterial3D
+	if mat != null:
+		mat.albedo_color = Color(tint.r, tint.g, tint.b, 0.16)
 
 
 func _disable_preview_collisions(node: Node) -> void:

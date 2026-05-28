@@ -72,12 +72,17 @@ func show_stone_hit(world: Node, pos: Vector3) -> void:
 
 func show_ore_gain(world: Node, pos: Vector3, amount: int) -> void:
 	if amount > 0:
-		spawn_floating_text(world, pos, "+%d руда" % amount, Color(0.38, 0.92, 1.0))
+		spawn_floating_text(world, pos, "+%d ore" % amount, Color(0.38, 0.92, 1.0))
+
+
+func show_wood_gain(world: Node, pos: Vector3, amount: int) -> void:
+	if amount > 0:
+		spawn_floating_text(world, pos, "+%d wood" % amount, Color(0.72, 0.42, 0.16))
 
 
 func show_coin_gain(world: Node, pos: Vector3, amount: int) -> void:
 	if amount > 0:
-		spawn_floating_text(world, pos, "+%d мон." % amount, Color(1.0, 0.82, 0.18))
+		spawn_floating_text(world, pos, "+%d coins" % amount, Color(1.0, 0.82, 0.18))
 
 
 func _make_fx_material(color: Color, alpha: float, emission: float) -> StandardMaterial3D:

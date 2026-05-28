@@ -4,12 +4,14 @@ extends StaticBody3D
 const LAYER_BREAKABLE := 32
 const TREE_MAX_HP := 200
 const ROCK_MAX_HP := 100
+const TREE_WOOD_REWARD := 10
 
 @export var is_tree: bool = true
 ## Дерево/камень выключены; HP как у камня, меш сундука. Награда — только coin_reward (без +1 монеты).
 @export var is_chest: bool = false
 ## -1 = случайный вариант. 0..3 — фиксированные силуэты деревьев.
 @export var tree_variant: int = -1
+@export var rock_variant: int = -1
 ## При разрушении: >0 — GameState.add_coins(...); иначе одна монета как у дерева/камня.
 @export var coin_reward: int = 0
 
@@ -37,6 +39,8 @@ func _ready() -> void:
 	collision_layer = LAYER_BREAKABLE
 	collision_mask = 0
 	add_to_group("breakable")
+	if is_tree and not is_chest:
+		add_to_group(&"tree")
 	var col := CollisionShape3D.new()
 	if is_tree:
 		var cyl := CylinderShape3D.new()
@@ -56,7 +60,7 @@ func _ready() -> void:
 		bx.size = Vector3(0.88, 0.58, 0.82)
 		col.shape = bx
 		col.position = Vector3(0.0, 0.29, 0.0)
-		_add_rock_mesh()
+		_add_rock_meshes()
 	add_child(col)
 	_setup_hp_bar()
 	set_process(false)
@@ -172,14 +176,32 @@ func _add_wide_old_tree() -> void:
 	_add_leaf_sphere(Vector3(0.0, 4.85, 0.18), 0.92, 1.2, Color(0.22, 0.56, 0.18))
 
 
-func _add_rock_mesh() -> void:
+func _add_rock_meshes() -> void:
+	var variant := randi_range(0, 3) if rock_variant < 0 else wrapi(rock_variant, 0, 4)
+	match variant:
+		0:
+			_add_rock_mesh(Vector3(0.88, 0.58, 0.82), Vector3(0.0, 0.29, 0.0), Color(0.42, 0.4, 0.38))
+		1:
+			_add_rock_mesh(Vector3(1.05, 0.45, 0.72), Vector3(-0.08, 0.23, 0.0), Color(0.36, 0.36, 0.34), Vector3(0.0, 18.0, -7.0))
+			_add_rock_mesh(Vector3(0.52, 0.38, 0.5), Vector3(0.42, 0.19, 0.1), Color(0.48, 0.46, 0.42), Vector3(0.0, -12.0, 5.0))
+		2:
+			_add_rock_mesh(Vector3(0.62, 0.9, 0.58), Vector3(0.0, 0.45, 0.0), Color(0.38, 0.39, 0.4), Vector3(0.0, 28.0, 8.0))
+			_add_rock_mesh(Vector3(0.46, 0.35, 0.42), Vector3(-0.34, 0.18, 0.18), Color(0.5, 0.49, 0.45))
+		_:
+			_add_rock_mesh(Vector3(1.15, 0.32, 0.95), Vector3(0.0, 0.16, 0.0), Color(0.44, 0.43, 0.4), Vector3(0.0, -24.0, 0.0))
+			_add_rock_mesh(Vector3(0.38, 0.55, 0.36), Vector3(-0.36, 0.35, -0.2), Color(0.34, 0.34, 0.33), Vector3(8.0, 0.0, 11.0))
+			_add_rock_mesh(Vector3(0.42, 0.48, 0.4), Vector3(0.38, 0.31, 0.18), Color(0.52, 0.5, 0.46), Vector3(-5.0, 0.0, -9.0))
+
+
+func _add_rock_mesh(size: Vector3, pos: Vector3, color: Color, rot: Vector3 = Vector3.ZERO) -> void:
 	var rock := MeshInstance3D.new()
 	var bm := BoxMesh.new()
-	bm.size = Vector3(0.88, 0.58, 0.82)
+	bm.size = size
 	rock.mesh = bm
-	rock.position.y = 0.29
+	rock.position = pos
+	rock.rotation_degrees = rot
 	var rm := StandardMaterial3D.new()
-	rm.albedo_color = Color(0.42, 0.4, 0.38)
+	rm.albedo_color = color
 	rm.roughness = 0.92
 	rock.set_surface_override_material(0, rm)
 	add_child(rock)
@@ -271,7 +293,7 @@ func _refresh_hp_fill() -> void:
 	_fill_box.size = Vector3(maxf(w, 0.02), 0.11, 0.032)
 	_fill_mesh.position.x = -HP_BAR_FULL_WIDTH * 0.5 + _fill_box.size.x * 0.5
 	if _hp_label:
-		_hp_label.text = "Осталось HP: %d / %d" % [hp, max_hp]
+		_hp_label.text = "HP left: %d / %d" % [hp, max_hp]
 
 
 func _process(_delta: float) -> void:
@@ -282,6 +304,32 @@ func _process(_delta: float) -> void:
 		return
 	_bar_root.look_at(cam.global_position, Vector3.UP)
 	_bar_root.rotate_object_local(Vector3.UP, PI)
+
+
+func get_wood_remaining() -> int:
+	return maxi(hp, 0) if is_tree and not is_chest else 0
+
+
+func get_work_anchor_global() -> Vector3:
+	return global_position + Vector3(0.0, 0.55, 1.2)
+
+
+func try_chop_worker_hit(damage: int) -> int:
+	if not is_tree or is_chest or hp <= 0:
+		return 0
+	var fx_pos := global_position + Vector3(0.0, 2.3, 0.0)
+	SoundManager.play_one_shot(SoundManager.KEY_HIT_WOOD)
+	FeedbackFx.show_wood_hit(get_parent(), fx_pos)
+	hp -= damage
+	if not _bar_shown:
+		_bar_shown = true
+		_bar_root.visible = true
+		set_process(true)
+	_refresh_hp_fill()
+	if hp > 0:
+		return 0
+	queue_free()
+	return TREE_WOOD_REWARD
 
 
 func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
@@ -306,6 +354,9 @@ func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 	if hp <= 0:
 		var reward := coin_reward if coin_reward > 0 else 1
 		FeedbackFx.show_coin_gain(get_parent(), global_position + Vector3(0.0, 1.2, 0.0), reward)
+		if is_tree and not is_chest:
+			FeedbackFx.show_wood_gain(get_parent(), global_position + Vector3(0.0, 1.55, 0.0), TREE_WOOD_REWARD)
+			GameState.add_wood(TREE_WOOD_REWARD)
 		if coin_reward > 0:
 			GameState.add_coins(coin_reward)
 		else:
