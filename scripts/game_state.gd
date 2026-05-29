@@ -46,6 +46,7 @@ var awaiting_build_type: int = BUILD_NONE
 var base_hp: int = BASE_MAX_HP
 var game_over: bool = false
 var game_mode: int = GAME_MODE_MISSION
+var has_giant_warrior: bool = false
 
 signal coins_changed(new_total: int)
 signal ore_changed(new_total: int)
@@ -116,6 +117,7 @@ func reset_run() -> void:
 	commander_active = false
 	awaiting_build_type = BUILD_NONE
 	base_hp = BASE_MAX_HP
+	has_giant_warrior = false
 	coins_changed.emit(coins)
 	ore_changed.emit(ore)
 	wood_changed.emit(wood)

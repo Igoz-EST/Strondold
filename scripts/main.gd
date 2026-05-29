@@ -6,6 +6,9 @@ const _MineScene := preload("res://scenes/mine.tscn")
 const _WaveManagerScript := preload("res://scripts/wave_manager.gd")
 const _BaseWorldHpScript := preload("res://scripts/base_world_hp.gd")
 const _PauseEscListenerScript := preload("res://scripts/pause_menu_esc_listener.gd")
+const _WarriorScene       := preload("res://scenes/warrior.tscn")
+const _GiantWarriorScript := preload("res://scripts/giant_warrior.gd")
+const _EnemyScene         := preload("res://scenes/enemy.tscn")
 
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
 const _BG_MUSIC_PATH := "res://assets/music/krepost_strondolt.mp3"
@@ -27,6 +30,45 @@ const RANDOM_ROCK_COUNT := 25
 const ENDLESS_BREAKABLE_MULTIPLIER := 3
 const MINE_CLEAR_RADIUS := 15.0
 const BREAKABLE_CLEAR_RADIUS := 4.6
+
+const _CASINO_REWARDS := [
+	{"id": "coin1",        "label": "1\nCoin",    "weight": 35.0},
+	{"id": "coin5",        "label": "5\nCoins",   "weight": 25.0},
+	{"id": "coin10",       "label": "10\nCoins",  "weight": 15.0},
+	{"id": "coin20",       "label": "20\nCoins",  "weight": 7.0},
+	{"id": "ore200",       "label": "200\nOre",   "weight": 5.0},
+	{"id": "wood200",      "label": "200\nWood",  "weight": 5.0},
+	{"id": "coin100",      "label": "100\nCoins", "weight": 2.0},
+	{"id": "empty",        "label": "Empty",      "weight": 25.0},
+	{"id": "enemy_attack", "label": "ATTACK!",    "weight": 3.0},
+]
+# Giant jackpot — separate from loot table, index = _CASINO_REWARDS.size() = 9
+const _CASINO_GIANT := {"id": "giant", "label": "GIANT\nWARRIOR"}
+# Jackpot curve: [bet, chance] — linear interpolation between points, capped at last
+const _CASINO_JP_CURVE := [
+	[1,   0.0001], [5,   0.0003], [10,  0.0008],
+	[25,  0.002],  [50,  0.01],   [100, 0.03], [250, 0.05],
+]
+# BG colors: indices 0-8 = REWARDS, index 9 = giant
+const _CASINO_BG := [
+	Color(0.35, 0.30, 0.08), Color(0.40, 0.34, 0.09), Color(0.45, 0.38, 0.10),
+	Color(0.55, 0.46, 0.00), Color(0.04, 0.22, 0.38), Color(0.25, 0.12, 0.02),
+	Color(0.45, 0.20, 0.00), Color(0.10, 0.10, 0.10), Color(0.30, 0.04, 0.04),
+	Color(0.22, 0.00, 0.38),
+]
+const _CASINO_TXT := [
+	Color(0.95, 0.85, 0.30), Color(0.95, 0.85, 0.30), Color(0.95, 0.85, 0.30),
+	Color(1.00, 0.95, 0.30), Color(0.40, 0.90, 1.00), Color(0.75, 0.48, 0.15),
+	Color(1.00, 0.58, 0.10), Color(0.38, 0.38, 0.38), Color(1.00, 0.22, 0.18),
+	Color(0.88, 0.45, 1.00),
+]
+const _CASINO_ITEM_W  := 86
+const _CASINO_ITEM_H  := 60
+const _CASINO_SEP     := 2
+const _CASINO_STRIDE  := 88  # ITEM_W + SEP
+const _CASINO_VIS     := 5
+const _CASINO_TOTAL   := 40
+const _CASINO_FIN_IDX := 32
 
 @onready var _coin_label: Label = $CanvasLayer/CoinLabel
 @onready var _ore_label: Label = $CanvasLayer/OreLabel
@@ -50,6 +92,15 @@ var _worker_timer_label: Label
 var _worker_spawn_pending := false
 var _worker_spawn_time_left := 0.0
 var _pending_worker_role := "miner"
+
+var _casino_bet_slider: HSlider
+var _casino_bet_label:  Label
+var _casino_mult_label: Label
+var _casino_roll_btn:   Button
+var _casino_result_lbl: Label
+var _casino_strip_row:  HBoxContainer
+var _casino_clip:       Control
+var _casino_rolling     := false
 
 var _dev_console_layer: CanvasLayer
 var _dev_line: LineEdit
@@ -117,6 +168,15 @@ func _ready() -> void:
 	_on_base_hp_changed(GameState.base_hp, GameState.BASE_MAX_HP)
 	_setup_wave_timer_ui()
 	call_deferred(&"_spawn_secret_chest_random")
+	if GameState.has_giant_warrior:
+		call_deferred(&"_spawn_saved_giant_warrior")
+
+
+func _spawn_saved_giant_warrior() -> void:
+	var gw := _WarriorScene.instantiate() as CharacterBody3D
+	gw.set_script(_GiantWarriorScript)
+	add_child(gw)
+	gw.global_position = Vector3(8.0, 0.0, 3.0)
 
 
 func _apply_map_scale() -> void:
@@ -522,7 +582,9 @@ func _setup_commander_build_ui() -> void:
 	_buy_woodcutter_button.pressed.connect(_on_buy_woodcutter_pressed)
 	worker_buttons_row.add_child(_buy_woodcutter_button)
 
-	bar.offset_top = -166.0
+	_build_casino_tab(tabs)
+
+	bar.offset_top = -240.0
 	_on_coins_changed(GameState.coins)
 	_refresh_ore_labels()
 	_refresh_workers_ui()
@@ -689,6 +751,7 @@ func _on_coins_changed(total: int) -> void:
 	_refresh_upgrade_buttons()
 	_refresh_workers_ui()
 	_refresh_market_buttons()
+	_casino_update_ui()
 
 
 func _on_commander_mode(active: bool) -> void:
@@ -1190,3 +1253,265 @@ func _on_dev_console_submitted(text: String) -> void:
 		var n: int = int(m.get_string(1))
 		GameState.add_coins(n)
 	_dev_line.clear()
+
+
+# ─── CASINO ───────────────────────────────────────────────────────────────────
+
+func _build_casino_tab(tabs: TabContainer) -> void:
+	var tab := MarginContainer.new()
+	tab.name = "Casino"
+	tab.add_theme_constant_override("margin_left",   6)
+	tab.add_theme_constant_override("margin_top",    4)
+	tab.add_theme_constant_override("margin_right",  6)
+	tab.add_theme_constant_override("margin_bottom", 6)
+	tabs.add_child(tab)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 5)
+	tab.add_child(col)
+
+	# — Bet row —
+	var bet_row := HBoxContainer.new()
+	bet_row.add_theme_constant_override("separation", 6)
+	col.add_child(bet_row)
+
+	var bet_lbl := Label.new()
+	bet_lbl.text = "BET:"
+	UiStyle.style_label(bet_lbl, UiStyle.TEXT_MAIN, 14, 2)
+	bet_row.add_child(bet_lbl)
+
+	_casino_bet_slider = HSlider.new()
+	_casino_bet_slider.min_value             = 1.0
+	_casino_bet_slider.max_value             = float(maxi(1, GameState.coins))
+	_casino_bet_slider.step                  = 1.0
+	_casino_bet_slider.value                 = 1.0
+	_casino_bet_slider.custom_minimum_size   = Vector2(140, 24)
+	_casino_bet_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_casino_bet_slider.focus_mode            = Control.FOCUS_NONE
+	_casino_bet_slider.value_changed.connect(_on_casino_bet_changed)
+	# Visible track styling
+	var sl_bg := StyleBoxFlat.new()
+	sl_bg.bg_color = Color(0.18, 0.16, 0.12)
+	sl_bg.set_corner_radius_all(3)
+	sl_bg.content_margin_top    = 8.0
+	sl_bg.content_margin_bottom = 8.0
+	_casino_bet_slider.add_theme_stylebox_override(&"slider", sl_bg)
+	var sl_fill := StyleBoxFlat.new()
+	sl_fill.bg_color = Color(0.75, 0.60, 0.10)
+	sl_fill.set_corner_radius_all(3)
+	sl_fill.content_margin_top    = 8.0
+	sl_fill.content_margin_bottom = 8.0
+	_casino_bet_slider.add_theme_stylebox_override(&"grabber_area", sl_fill)
+	_casino_bet_slider.add_theme_constant_override(&"grabber_offset", 0)
+	bet_row.add_child(_casino_bet_slider)
+
+	_casino_bet_label = Label.new()
+	_casino_bet_label.custom_minimum_size = Vector2(80, 0)
+	UiStyle.style_label(_casino_bet_label, UiStyle.TEXT_COIN, 14, 2)
+	bet_row.add_child(_casino_bet_label)
+
+	_casino_mult_label = Label.new()
+	UiStyle.style_label(_casino_mult_label, Color(0.80, 0.50, 1.0), 13, 2)
+	col.add_child(_casino_mult_label)
+
+	_casino_result_lbl = Label.new()
+	_casino_result_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_casino_result_lbl.text = " "
+	UiStyle.style_label(_casino_result_lbl, UiStyle.TEXT_HP, 13, 2)
+	col.add_child(_casino_result_lbl)
+
+	# — Strip (clipped) —
+	var clip := Control.new()
+	clip.custom_minimum_size   = Vector2(_CASINO_STRIDE * _CASINO_VIS, _CASINO_ITEM_H + 20)
+	clip.clip_contents         = true
+	clip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clip.size_flags_vertical   = Control.SIZE_SHRINK_BEGIN
+	col.add_child(clip)
+	_casino_clip = clip
+
+	var arrow := Label.new()
+	arrow.text = "▼"
+	arrow.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	arrow.offset_top    = 0.0
+	arrow.offset_bottom = 18.0
+	arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_label(arrow, Color.WHITE, 14, 3)
+	clip.add_child(arrow)
+
+	_casino_strip_row = HBoxContainer.new()
+	_casino_strip_row.add_theme_constant_override("separation", _CASINO_SEP)
+	_casino_strip_row.position = Vector2(0.0, 18.0)
+	clip.add_child(_casino_strip_row)
+
+	# — Roll button —
+	_casino_roll_btn = Button.new()
+	_casino_roll_btn.text                = "ROLL"
+	_casino_roll_btn.custom_minimum_size = Vector2(160, 40)
+	_casino_roll_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_casino_roll_btn.focus_mode          = Control.FOCUS_NONE
+	UiStyle.style_button(_casino_roll_btn, 20)
+	_casino_roll_btn.pressed.connect(_on_casino_roll_pressed)
+	col.add_child(_casino_roll_btn)
+
+	_casino_update_ui()
+
+
+func _on_casino_bet_changed(_v: float) -> void:
+	_casino_update_ui()
+
+
+func _casino_update_ui() -> void:
+	if _casino_bet_slider == null:
+		return
+	_casino_bet_slider.max_value = float(maxi(1, GameState.coins))
+	_casino_bet_slider.value = clampf(_casino_bet_slider.value, 1.0, float(maxi(1, GameState.coins)))
+	var bet := int(_casino_bet_slider.value)
+	if _casino_bet_label:
+		_casino_bet_label.text = "%d / %d coins" % [bet, GameState.coins]
+	if _casino_mult_label:
+		_casino_mult_label.text = "Giant: %.2f%%" % (_casino_jackpot_chance(bet) * 100.0)
+	if _casino_roll_btn:
+		_casino_roll_btn.disabled = _casino_rolling or GameState.coins < bet
+
+
+func _on_casino_roll_pressed() -> void:
+	var bet := int(_casino_bet_slider.value)
+	if _casino_rolling or GameState.coins < bet:
+		return
+	if not GameState.spend_coins(bet):
+		return
+	_casino_rolling = true
+	_casino_roll_btn.disabled = true
+	_casino_result_lbl.text = "Rolling..."
+	var reward: Dictionary = _casino_pick_reward(bet)
+	_casino_build_strip(reward)
+	_casino_animate(reward)
+
+
+func _casino_jackpot_chance(bet: int) -> float:
+	var b := float(bet)
+	if b <= _CASINO_JP_CURVE[0][0]:
+		return _CASINO_JP_CURVE[0][1]
+	if b >= _CASINO_JP_CURVE[-1][0]:
+		return _CASINO_JP_CURVE[-1][1]
+	for i in range(_CASINO_JP_CURVE.size() - 1):
+		var lo: Array = _CASINO_JP_CURVE[i]
+		var hi: Array = _CASINO_JP_CURVE[i + 1]
+		if b >= float(lo[0]) and b < float(hi[0]):
+			var t := (b - float(lo[0])) / (float(hi[0]) - float(lo[0]))
+			return lerpf(float(lo[1]), float(hi[1]), t)
+	return _CASINO_JP_CURVE[-1][1]
+
+
+func _casino_pick_reward(bet: int) -> Dictionary:
+	# Giant jackpot roll first
+	var jp := _casino_jackpot_chance(bet)
+	if jp > 0.0 and randf() < jp:
+		return _CASINO_GIANT
+	# Static weighted roll
+	var total := 0.0
+	for r in _CASINO_REWARDS:
+		total += float(r["weight"])
+	var roll := randf() * total
+	var acc  := 0.0
+	for r in _CASINO_REWARDS:
+		acc += float(r["weight"])
+		if roll < acc:
+			return r
+	return _CASINO_REWARDS[0]
+
+
+func _casino_build_strip(final: Dictionary) -> void:
+	for c in _casino_strip_row.get_children():
+		_casino_strip_row.remove_child(c)
+		c.free()
+	_casino_strip_row.position.x = 0.0
+	var fin_idx := _CASINO_REWARDS.size() if final.get("id","") == "giant" else _CASINO_REWARDS.find(final)
+	for i in _CASINO_TOTAL:
+		if i == _CASINO_FIN_IDX:
+			_casino_strip_row.add_child(_casino_make_item(final, fin_idx))
+		else:
+			var ri := randi() % _CASINO_REWARDS.size()
+			_casino_strip_row.add_child(_casino_make_item(_CASINO_REWARDS[ri], ri))
+
+
+func _casino_make_item(r: Dictionary, r_idx: int) -> Control:
+	var bg_col:  Color = _CASINO_BG[r_idx]  if r_idx >= 0 else Color(0.2, 0.2, 0.2)
+	var txt_col: Color = _CASINO_TXT[r_idx] if r_idx >= 0 else Color.WHITE
+	var brd_col := Color(0.30, 0.28, 0.25)
+	var brd_w   := 1
+
+	var c := PanelContainer.new()
+	c.custom_minimum_size = Vector2(_CASINO_ITEM_W, _CASINO_ITEM_H)
+	c.add_theme_stylebox_override(&"panel",
+		UiStyle.panel_style(bg_col, brd_col, 4, brd_w))
+
+	var lbl := Label.new()
+	lbl.text                  = r["label"]
+	lbl.horizontal_alignment  = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment    = VERTICAL_ALIGNMENT_CENTER
+	lbl.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	UiStyle.style_label(lbl, txt_col, 11, 2)
+	c.add_child(lbl)
+	return c
+
+
+func _casino_animate(reward: Dictionary) -> void:
+	await get_tree().process_frame  # Wait for layout so clip.size is correct
+	var center_x := _casino_clip.size.x * 0.5
+	if center_x < 1.0:
+		center_x = float(_CASINO_STRIDE * _CASINO_VIS) * 0.5
+	var end_x := center_x - _CASINO_FIN_IDX * float(_CASINO_STRIDE) - _CASINO_ITEM_W * 0.5
+	end_x += randf_range(-4.0, 4.0)
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC)
+	tw.set_ease(Tween.EASE_OUT)
+	tw.tween_property(_casino_strip_row, "position:x", end_x, 3.5)
+	tw.tween_callback(func() -> void: _casino_finish(reward))
+
+
+func _casino_finish(reward: Dictionary) -> void:
+	_casino_rolling = false
+	_casino_grant(reward)
+	match reward.get("id", ""):
+		"empty":        _casino_result_lbl.text = "No Reward."
+		"enemy_attack": _casino_result_lbl.text = "INCOMING ATTACK!"
+		_:              _casino_result_lbl.text = "Won: %s!" % (reward["label"] as String).replace("\n", " ")
+	_casino_update_ui()
+
+
+func _casino_grant(reward: Dictionary) -> void:
+	match reward.get("id", ""):
+		"coin1":        GameState.add_coins(1)
+		"coin5":        GameState.add_coins(5)
+		"coin10":       GameState.add_coins(10)
+		"coin20":       GameState.add_coins(20)
+		"ore200":       GameState.add_ore(200)
+		"wood200":      GameState.add_wood(200)
+		"coin100":      GameState.add_coins(100)
+		"giant":        _casino_try_spawn_giant()
+		"enemy_attack": _casino_spawn_enemy_attack()
+		# "empty": nothing
+
+
+func _casino_spawn_enemy_attack() -> void:
+	var spawn_node := get_node_or_null("ExteriorSpawn") as Node3D
+	var origin := spawn_node.global_position if spawn_node != null else Vector3(80.0, 0.0, 0.0)
+	for i in 5:
+		var e := _EnemyScene.instantiate()
+		add_child(e)
+		var angle := float(i) / 5.0 * TAU
+		e.global_position = origin + Vector3(cos(angle) * 4.0, 0.0, sin(angle) * 4.0)
+
+
+func _casino_try_spawn_giant() -> void:
+	if GameState.has_giant_warrior:
+		GameState.add_coins(50)
+		_casino_result_lbl.text = "Giant exists! +50 Coins."
+		return
+	var gw := _WarriorScene.instantiate() as CharacterBody3D
+	gw.set_script(_GiantWarriorScript)
+	add_child(gw)
+	gw.global_position = Vector3(8.0, 0.0, 3.0)
+	GameState.has_giant_warrior = true
