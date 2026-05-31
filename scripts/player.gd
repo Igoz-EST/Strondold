@@ -754,6 +754,8 @@ func _create_build_preview(build_type: int) -> void:
 			_build_preview = _BarracksFactory.create_barracks(GameState.barracks_level)
 		GameState.BUILD_WAREHOUSE:
 			_build_preview = _WarehouseFactory.create_warehouse()
+		GameState.BUILD_SKYWATCH:
+			_build_preview = load("res://scripts/skywatch_scene.gd").create_skywatch()
 		_:
 			return
 	_build_preview_type = build_type

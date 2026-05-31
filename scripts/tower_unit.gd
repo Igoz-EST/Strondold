@@ -60,6 +60,8 @@ func _pick_nearest_enemy() -> Node3D:
 	for n in get_tree().get_nodes_in_group(&"enemy"):
 		if not (n is Node3D) or not is_instance_valid(n):
 			continue
+		if (n as Node3D).is_in_group(&"flying_enemy"):
+			continue   # ground towers cannot target flying enemies
 		var nd := n as Node3D
 		var d2 := p.distance_squared_to(nd.global_position)
 		if d2 < best_d2:

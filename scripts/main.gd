@@ -78,7 +78,8 @@ const _CASINO_FIN_IDX := 32
 @onready var _ore_deposit: Marker3D = $OreDeposit
 
 var _build_layer: CanvasLayer
-var _tower_button: Button
+var _tower_button:    Button
+var _skywatch_button: Button
 var _barracks_button: Button
 var _warehouse_button: Button
 var _dmg_upgrade_button: Button
@@ -188,7 +189,7 @@ func _spawn_saved_giant_warrior() -> void:
 	var gw := _WarriorScene.instantiate() as CharacterBody3D
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
-	gw.global_position = Vector3(8.0, 0.0, 3.0)
+	gw.global_position = Vector3(7.0, 0.55, 22.0)  # road near base, outside base collisions
 
 
 func _apply_map_scale() -> void:
@@ -487,6 +488,16 @@ func _setup_commander_build_ui() -> void:
 	_warehouse_button.pressed.connect(_on_warehouse_button_pressed)
 	row_build.add_child(_warehouse_button)
 
+	_skywatch_button = Button.new()
+	_skywatch_button.focus_mode = Control.FOCUS_NONE
+	_skywatch_button.custom_minimum_size = Vector2(118, 96)
+	_skywatch_button.text = "SKYWATCH\n🔭\n%d ore\n%d wood" % [GameState.SKYWATCH_ORE_COST, GameState.SKYWATCH_WOOD_COST]
+	_skywatch_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_skywatch_button, 13)
+	_skywatch_button.tooltip_text = "Anti-air tower. Attacks flying enemies only. 20% more range than standard tower."
+	_skywatch_button.pressed.connect(_on_skywatch_button_pressed)
+	row_build.add_child(_skywatch_button)
+
 	var upgrades_tab := MarginContainer.new()
 	upgrades_tab.name = "Upgrades"
 	upgrades_tab.add_theme_constant_override("margin_left", 6)
@@ -600,6 +611,10 @@ func _on_warehouse_button_pressed() -> void:
 	GameState.begin_warehouse_blueprint()
 
 
+func _on_skywatch_button_pressed() -> void:
+	GameState.begin_skywatch_blueprint()
+
+
 func _on_dmg_upgrade_pressed() -> void:
 	GameState.buy_dmg_upgrade()
 	_refresh_upgrade_buttons()
@@ -685,11 +700,13 @@ func _refresh_market_buttons() -> void:
 
 func _refresh_build_buttons() -> void:
 	if _tower_button:
-		_tower_button.disabled = not GameState.can_afford_build(GameState.BUILD_TOWER)
+		_tower_button.disabled    = not GameState.can_afford_build(GameState.BUILD_TOWER)
 	if _barracks_button:
 		_barracks_button.disabled = not GameState.can_afford_build(GameState.BUILD_BARRACKS)
 	if _warehouse_button:
 		_warehouse_button.disabled = not GameState.can_afford_build(GameState.BUILD_WAREHOUSE)
+	if _skywatch_button:
+		_skywatch_button.disabled  = not GameState.can_afford_build(GameState.BUILD_SKYWATCH)
 
 
 func _refresh_ore_labels() -> void:
@@ -742,19 +759,14 @@ func _on_pending_build(pending: bool) -> void:
 	var gold := Color(1.0, 0.92, 0.45)
 	var white := Color.WHITE
 	if not pending:
-		if _tower_button:
-			_tower_button.modulate = white
-		if _barracks_button:
-			_barracks_button.modulate = white
-		if _warehouse_button:
-			_warehouse_button.modulate = white
+		for btn in [_tower_button, _barracks_button, _warehouse_button, _skywatch_button]:
+			if btn: btn.modulate = white
 		return
-	if _tower_button:
-		_tower_button.modulate = gold if GameState.awaiting_build_type == GameState.BUILD_TOWER else white
-	if _barracks_button:
-		_barracks_button.modulate = gold if GameState.awaiting_build_type == GameState.BUILD_BARRACKS else white
-	if _warehouse_button:
-		_warehouse_button.modulate = gold if GameState.awaiting_build_type == GameState.BUILD_WAREHOUSE else white
+	var bt := GameState.awaiting_build_type
+	if _tower_button:    _tower_button.modulate    = gold if bt == GameState.BUILD_TOWER    else white
+	if _barracks_button: _barracks_button.modulate = gold if bt == GameState.BUILD_BARRACKS else white
+	if _warehouse_button:_warehouse_button.modulate= gold if bt == GameState.BUILD_WAREHOUSE else white
+	if _skywatch_button: _skywatch_button.modulate = gold if bt == GameState.BUILD_SKYWATCH  else white
 
 
 func _setup_game_over_ui() -> void:
@@ -1151,7 +1163,7 @@ func _setup_dev_console() -> void:
 
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	panel.offset_top    = -260.0
+	panel.offset_top    = -300.0
 	panel.offset_bottom = -8.0
 	panel.mouse_filter  = Control.MOUSE_FILTER_STOP
 	panel.add_theme_stylebox_override(&"panel", UiStyle.panel_style(UiStyle.PANEL_BG_SOFT, UiStyle.PANEL_BORDER_DIM, 8, 1))
@@ -1223,9 +1235,25 @@ func _setup_dev_console() -> void:
 	btn_boss.pressed.connect(func() -> void: _dev_spawn_enemy(2))
 	row3.add_child(btn_boss)
 
+	var row4 := HBoxContainer.new()
+	row4.add_theme_constant_override("separation", 5)
+	col.add_child(row4)
+
+	var btn_bat := Button.new()
+	btn_bat.text = "Spawn BAT Pig"; btn_bat.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(btn_bat, 13)
+	btn_bat.pressed.connect(func() -> void: _dev_spawn_enemy(5))
+	row4.add_child(btn_bat)
+
+	var btn_skip := Button.new()
+	btn_skip.text = "Skip Wave"; btn_skip.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(btn_skip, 13)
+	btn_skip.pressed.connect(_dev_skip_wave)
+	row4.add_child(btn_skip)
+
 	# ── CHAT / CONSOLE ───────────────────────────────────────────────────────
 	var hint := Label.new()
-	hint.text = "T - open. Money:number  |  wave_skip - next wave  |  Esc - close"
+	hint.text = "T - open. Money:number  |  Esc - close"
 	UiStyle.style_label(hint, UiStyle.TEXT_MUTED, 13, 2)
 	col.add_child(hint)
 
@@ -1315,8 +1343,14 @@ func _dev_spawn_giant_warrior() -> void:
 	var gw := _WarriorScene.instantiate() as CharacterBody3D
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
-	gw.global_position = _dev_get_spawn_pos()
+	gw.global_position = Vector3(7.0, 0.55, 22.0)  # road near base, outside base collisions
 	GameState.has_giant_warrior = true
+
+
+func _dev_skip_wave() -> void:
+	var wm: Node = get_node_or_null("WaveManager")
+	if wm != null and wm.has_method(&"skip_next_pending_wave"):
+		wm.call(&"skip_next_pending_wave")
 
 
 func _dev_toggle_infinite_resources() -> void:
@@ -1594,7 +1628,7 @@ func _casino_try_spawn_giant() -> void:
 	var gw := _WarriorScene.instantiate() as CharacterBody3D
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
-	gw.global_position = Vector3(8.0, 0.0, 3.0)
+	gw.global_position = Vector3(7.0, 0.55, 22.0)  # road near base, outside base collisions
 	GameState.has_giant_warrior = true
 
 

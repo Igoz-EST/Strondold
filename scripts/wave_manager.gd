@@ -5,11 +5,12 @@ const WAVE_TIMES_SEC := [180.0, 300.0, 600.0, 1200.0]
 
 const _EnemyScene := preload("res://scenes/enemy.tscn")
 
-const KIND_NORMAL := 0
-const KIND_BIG    := 1
-const KIND_BOSS   := 2
-const KIND_GOLEM  := 3
-const KIND_DEMON  := 4
+const KIND_NORMAL  := 0
+const KIND_BIG     := 1
+const KIND_BOSS    := 2
+const KIND_GOLEM   := 3
+const KIND_DEMON   := 4
+const KIND_BAT_PIG := 5
 
 const SPAWN_RADIUS := 132.0
 

@@ -1,20 +1,24 @@
 extends Node
 
-const _TowerFactory := preload("res://scripts/tower_scene.gd")
+const _TowerFactory    := preload("res://scripts/tower_scene.gd")
 const _BarracksFactory := preload("res://scripts/barracks_scene.gd")
 const _WarehouseFactory := preload("res://scripts/warehouse_scene.gd")
+const _SkywatchFactory  := preload("res://scripts/skywatch_scene.gd")
 
-const TOWER_ORE_COST := 200
-const TOWER_WOOD_COST := 20
-const BARRACKS_ORE_COST := 350
+const TOWER_ORE_COST     := 200
+const TOWER_WOOD_COST    := 20
+const BARRACKS_ORE_COST  := 350
 const BARRACKS_WOOD_COST := 40
 const WAREHOUSE_ORE_COST := 100
 const WAREHOUSE_WOOD_COST := 60
+const SKYWATCH_ORE_COST  := 200
+const SKYWATCH_WOOD_COST := 20
 
-const BUILD_NONE := -1
-const BUILD_TOWER := 0
+const BUILD_NONE     := -1
+const BUILD_TOWER    := 0
 const BUILD_BARRACKS := 1
 const BUILD_WAREHOUSE := 2
+const BUILD_SKYWATCH  := 3
 const DMG_UPGRADE_COST := 5
 const DMG_UPGRADE_AMOUNT := 10
 const ORE_PER_COIN := 100
@@ -169,23 +173,19 @@ func can_afford_build(build_type: int) -> bool:
 
 func get_build_ore_cost(build_type: int) -> int:
 	match build_type:
-		BUILD_TOWER:
-			return TOWER_ORE_COST
-		BUILD_BARRACKS:
-			return BARRACKS_ORE_COST
-		BUILD_WAREHOUSE:
-			return WAREHOUSE_ORE_COST
+		BUILD_TOWER:     return TOWER_ORE_COST
+		BUILD_BARRACKS:  return BARRACKS_ORE_COST
+		BUILD_WAREHOUSE: return WAREHOUSE_ORE_COST
+		BUILD_SKYWATCH:  return SKYWATCH_ORE_COST
 	return 0
 
 
 func get_build_wood_cost(build_type: int) -> int:
 	match build_type:
-		BUILD_TOWER:
-			return TOWER_WOOD_COST
-		BUILD_BARRACKS:
-			return BARRACKS_WOOD_COST
-		BUILD_WAREHOUSE:
-			return WAREHOUSE_WOOD_COST
+		BUILD_TOWER:     return TOWER_WOOD_COST
+		BUILD_BARRACKS:  return BARRACKS_WOOD_COST
+		BUILD_WAREHOUSE: return WAREHOUSE_WOOD_COST
+		BUILD_SKYWATCH:  return SKYWATCH_WOOD_COST
 	return 0
 
 
@@ -329,44 +329,38 @@ func set_commander_mode(active: bool) -> void:
 
 
 func begin_tower_blueprint() -> void:
-	if not commander_active:
-		return
-	if awaiting_build_type == BUILD_TOWER:
-		cancel_tower_blueprint()
-		return
-	if awaiting_build_type == BUILD_BARRACKS or awaiting_build_type == BUILD_WAREHOUSE:
-		cancel_tower_blueprint()
-	if not can_afford_build(BUILD_TOWER):
-		return
+	if not commander_active: return
+	if awaiting_build_type == BUILD_TOWER: cancel_tower_blueprint(); return
+	if awaiting_build_type != BUILD_NONE:  cancel_tower_blueprint()
+	if not can_afford_build(BUILD_TOWER): return
 	awaiting_build_type = BUILD_TOWER
 	pending_build_changed.emit(true)
 
 
 func begin_barracks_blueprint() -> void:
-	if not commander_active:
-		return
-	if awaiting_build_type == BUILD_BARRACKS:
-		cancel_tower_blueprint()
-		return
-	if awaiting_build_type == BUILD_TOWER or awaiting_build_type == BUILD_WAREHOUSE:
-		cancel_tower_blueprint()
-	if not can_afford_build(BUILD_BARRACKS):
-		return
+	if not commander_active: return
+	if awaiting_build_type == BUILD_BARRACKS: cancel_tower_blueprint(); return
+	if awaiting_build_type != BUILD_NONE:     cancel_tower_blueprint()
+	if not can_afford_build(BUILD_BARRACKS): return
 	awaiting_build_type = BUILD_BARRACKS
 	pending_build_changed.emit(true)
 
 
 func begin_warehouse_blueprint() -> void:
-	if not commander_active:
-		return
-	if awaiting_build_type == BUILD_WAREHOUSE:
-		cancel_tower_blueprint()
-		return
-	if awaiting_build_type == BUILD_TOWER or awaiting_build_type == BUILD_BARRACKS:
-		cancel_tower_blueprint()
-	if not can_afford_build(BUILD_WAREHOUSE):
-		return
+	if not commander_active: return
+	if awaiting_build_type == BUILD_WAREHOUSE: cancel_tower_blueprint(); return
+	if awaiting_build_type != BUILD_NONE:      cancel_tower_blueprint()
+	if not can_afford_build(BUILD_WAREHOUSE): return
 	awaiting_build_type = BUILD_WAREHOUSE
+	pending_build_changed.emit(true)
+
+
+func begin_skywatch_blueprint() -> void:
+	if not commander_active: return
+	if awaiting_build_type == BUILD_SKYWATCH: cancel_tower_blueprint(); return
+	if awaiting_build_type != BUILD_NONE:     cancel_tower_blueprint()
+	if not can_afford_build(BUILD_SKYWATCH): return
+	awaiting_build_type = BUILD_SKYWATCH
 	pending_build_changed.emit(true)
 
 
@@ -434,6 +428,10 @@ func try_place_tower(world_pos: Vector3) -> bool:
 		var barracks := _BarracksFactory.create_barracks(barracks_level)
 		world.add_child(barracks)
 		barracks.global_position = p
+	elif build_type == BUILD_SKYWATCH:
+		var skywatch: StaticBody3D = _SkywatchFactory.create_skywatch()
+		world.add_child(skywatch)
+		skywatch.global_position = p
 	else:
 		var warehouse := _WarehouseFactory.create_warehouse()
 		world.add_child(warehouse)

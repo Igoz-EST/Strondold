@@ -135,7 +135,8 @@ func apply_upgrade_level(level: int) -> void:
 	if need_reload:
 		_load_warrior_model()
 	elif _warrior_model != null:
-		_warrior_model.scale = Vector3.ONE * (1.5 if upgrade_level == 2 else 1.0)
+		# L1: 0.7 (small/weaker), L2: 1.5 (upgraded), L3: 1.0 (angel knight model)
+		_warrior_model.scale = Vector3.ONE * (0.7 if upgrade_level == 1 else (1.5 if upgrade_level == 2 else 1.0))
 
 
 func _apply_level_visuals() -> void:
@@ -350,4 +351,23 @@ func _physics_process(delta: float) -> void:
 			velocity.z = 0.0
 			_w_play(_W_ANIM_IDLE)
 
+	_apply_separation()
 	move_and_slide()
+
+
+## Separation — pushes away from nearby warriors AND enemies (horizontal only).
+func _apply_separation() -> void:
+	const RADIUS := 1.8
+	const FORCE  := 3.5
+	var p    := global_position
+	var push := Vector3.ZERO
+	for grp: StringName in [&"warrior", &"enemy"]:
+		for n in get_tree().get_nodes_in_group(grp):
+			if n == self or not is_instance_valid(n) or not (n is Node3D): continue
+			var diff := p - (n as Node3D).global_position
+			diff.y = 0.0
+			var d := diff.length()
+			if d > 0.001 and d < RADIUS:
+				push += diff.normalized() * (RADIUS - d) / RADIUS * FORCE
+	velocity.x += push.x
+	velocity.z += push.z

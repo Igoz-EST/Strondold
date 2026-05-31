@@ -1,21 +1,37 @@
 extends "res://scripts/warrior.gd"
 
-const GIANT_VISION  := 63.0
-const PATROL_RADIUS := 12.0
-const _KNIGHT_PATH  := "res://assets/models/knight.glb"
+## Giant Warrior — forward defense interceptor.
+## Spawns at base → marches to hold position → blocks all enemies.
 
-# Animation names from knight.glb (verified in import preview)
+# ─── Model ────────────────────────────────────────────────────────────────────
+const _KNIGHT_PATH := "res://assets/models/knight.glb"
+
 const _GW_ANIM_IDLE   := ["idle", "idle_combat"]
 const _GW_ANIM_WALK   := ["walking", "combat_walk_forward"]
 const _GW_ANIM_ATTACK := ["default_atack_full_combo", "default_atack_3", "atack_overhead"]
 const _GW_ANIM_HIT    := ["pb_take_damage", "staggered_1", "poise_break"]
 const _GW_ANIM_DEATH  := ["death", "death_poise_break"]
 
-var _patrol_target := Vector3.ZERO
-var _patrol_timer  := 0.0
-var _gw_model:      Node3D          = null
-var _gw_anim:       AnimationPlayer = null
+# ─── Positions ────────────────────────────────────────────────────────────────
+## Enemy spawn is at (10, 0.55, 132) — Giant Warrior holds 15u in front of it.
+const _ENEMY_SPAWN  := Vector3(10.0, 0.0, 132.0)
+const _HOLD_POS     := Vector3(10.0, 0.0, 117.0)   # 15u before spawn
+const _HOLD_RADIUS  := 2.0                           # "arrived" threshold
 
+# ─── Stats ────────────────────────────────────────────────────────────────────
+const _MELEE_RANGE   := 4.0    # short melee range (not 15u like before)
+const _SPLASH_RADIUS := 4.0
+const _SPLASH_PCT    := 0.20   # 20% splash damage
+
+# ─── State machine ────────────────────────────────────────────────────────────
+enum GWState { MARCH, HOLD, COMBAT }
+var _gw_state: GWState = GWState.MARCH
+
+var _gw_model: Node3D         = null
+var _gw_anim:  AnimationPlayer = null
+
+
+# ─── Init ─────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
 	super._ready()
@@ -23,30 +39,26 @@ func _ready() -> void:
 	max_hp       = MAX_HP * 10
 	hp           = max_hp
 	melee_damage = MELEE_DAMAGE * 10
-	scale        = Vector3.ONE * 2.0   # ~2x normal warrior (not 10x)
+	scale        = Vector3.ONE * 2.0
 	if is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
 		_hp_bar.call(&"set_hp", hp, max_hp)
 	_load_knight_model()
-	_new_patrol()
 
 
-# Prevent warrior.gd from loading azure_sentinel on top of knight
 func _load_warrior_model() -> void:
-	pass
+	pass  # Prevent warrior.gd loading azure_sentinel
 
 
 func apply_upgrade_level(_level: int) -> void:
-	pass
+	pass  # Stats are fixed
 
 
 func _load_knight_model() -> void:
-	if not ResourceLoader.exists(_KNIGHT_PATH):
-		return
+	if not ResourceLoader.exists(_KNIGHT_PATH): return
 	var scene := load(_KNIGHT_PATH) as PackedScene
 	if scene == null: return
 	_gw_model = scene.instantiate() as Node3D
 	if _gw_model == null: return
-	# GLB faces -Z by default (GLTF spec) — no rotation needed
 	_gw_model.rotation_degrees = Vector3(0.0, 0.0, 0.0)
 	add_child(_gw_model)
 	_avatar_root.visible = false
@@ -54,6 +66,13 @@ func _load_knight_model() -> void:
 	if _gw_anim:
 		_gw_play(_GW_ANIM_IDLE)
 
+
+# ─── Accept duels from ALL enemies (blocks the whole group) ───────────────────
+func can_accept_duel_from(_enemy: Node) -> bool:
+	return true   # unlimited simultaneous engagements
+
+
+# ─── Animation helper ─────────────────────────────────────────────────────────
 
 func _gw_play(names: Array, loop: bool = true) -> bool:
 	if _gw_anim == null: return false
@@ -75,18 +94,13 @@ func _gw_death_fall() -> void:
 	tw.tween_property(_gw_model, "position:y", -0.4, 0.3)
 
 
-func _new_patrol() -> void:
-	var a := randf() * TAU
-	_patrol_target = Vector3(cos(a), 0.0, sin(a)) * PATROL_RADIUS
-	_patrol_timer  = randf_range(4.0, 8.0)
+# ─── Enemy search ─────────────────────────────────────────────────────────────
 
+const GIANT_VISION := 63.0
 
 func _pick_enemy() -> Node3D:
+	# Engage ANY enemy within reach
 	var vr2 := GIANT_VISION * GIANT_VISION
-	if _duel_enemy != null and is_instance_valid(_duel_enemy):
-		if global_position.distance_squared_to(_duel_enemy.global_position) <= vr2 * 1.5:
-			return _duel_enemy
-		_duel_enemy = null
 	var best: Node3D = null
 	var best_d2 := vr2
 	for n in get_tree().get_nodes_in_group(&"enemy"):
@@ -96,51 +110,93 @@ func _pick_enemy() -> Node3D:
 	return best
 
 
+# ─── Splash damage ────────────────────────────────────────────────────────────
+
+func _deal_splash_damage(primary: Node3D) -> void:
+	var splash := int(float(melee_damage) * _SPLASH_PCT)
+	if splash <= 0: return
+	var r2 := _SPLASH_RADIUS * _SPLASH_RADIUS
+	for n in get_tree().get_nodes_in_group(&"enemy"):
+		if n == primary or not is_instance_valid(n) or not (n is Node3D): continue
+		if global_position.distance_squared_to((n as Node3D).global_position) <= r2:
+			if n.has_method(&"apply_sword_hit"):
+				n.call(&"apply_sword_hit", splash, self)
+
+
+# ─── State machine ────────────────────────────────────────────────────────────
+
 func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
-	if _duel_enemy != null and not is_instance_valid(_duel_enemy):
-		_duel_enemy = null
 
-	var tgt := _pick_enemy()
-	if tgt != null:
-		var to_e := tgt.global_position - global_position
-		to_e.y = 0.0
-		var eff_range := ATTACK_RANGE * 2.0   # matches new scale
-		if to_e.length() > eff_range:
-			var dir := to_e.normalized()
-			velocity.x = dir.x * MOVE_SPEED
-			velocity.z = dir.z * MOVE_SPEED
-			look_at(global_position + dir, Vector3.UP)
-			_gw_play(_GW_ANIM_WALK)
-		else:
-			velocity.x = 0.0
-			velocity.z = 0.0
-			look_at(tgt.global_position, Vector3.UP)
-			_attack_cd -= delta
-			if _attack_cd <= 0.0 and tgt.has_method(&"apply_sword_hit"):
-				_attack_cd = ATTACK_INTERVAL
-				SoundManager.play_one_shot(SoundManager.KEY_SWORD_SWING, 0.14, -4.0)
-				tgt.call(&"apply_sword_hit", melee_damage)
-				_gw_play(_GW_ANIM_ATTACK, false)
-	else:
-		_patrol_timer -= delta
-		if _patrol_timer <= 0.0:
-			_new_patrol()
-		var to_p := _patrol_target - global_position
-		to_p.y = 0.0
-		if to_p.length() > 1.0:
-			var d := to_p.normalized()
-			velocity.x = d.x * MOVE_SPEED * 0.4
-			velocity.z = d.z * MOVE_SPEED * 0.4
-			look_at(global_position + d, Vector3.UP)
-			_gw_play(_GW_ANIM_WALK)
-		else:
-			velocity.x = 0.0
-			velocity.z = 0.0
-			_gw_play(_GW_ANIM_IDLE)
+	match _gw_state:
+		GWState.MARCH:  _do_march(delta)
+		GWState.HOLD:   _do_hold(delta)
+		GWState.COMBAT: _do_combat(delta)
+
 	move_and_slide()
 
+
+func _do_march(delta: float) -> void:
+	# Transition: enemy nearby → fight
+	if _pick_enemy() != null:
+		_gw_state = GWState.COMBAT
+		return
+
+	# Move toward hold position
+	var to := _HOLD_POS - global_position
+	to.y = 0.0
+	if to.length() <= _HOLD_RADIUS:
+		_gw_state = GWState.HOLD
+		velocity.x = 0.0; velocity.z = 0.0
+		_gw_play(_GW_ANIM_IDLE)
+		return
+
+	var dir := to.normalized()
+	velocity.x = dir.x * MOVE_SPEED
+	velocity.z = dir.z * MOVE_SPEED
+	look_at(global_position + dir, Vector3.UP)
+	_gw_play(_GW_ANIM_WALK)
+
+
+func _do_hold(_delta: float) -> void:
+	velocity.x = 0.0; velocity.z = 0.0
+	if _pick_enemy() != null:
+		_gw_state = GWState.COMBAT
+		return
+	_gw_play(_GW_ANIM_IDLE)
+
+
+func _do_combat(delta: float) -> void:
+	var tgt := _pick_enemy()
+	if tgt == null:
+		# Return to hold or resume march
+		var to_hold := _HOLD_POS - global_position
+		to_hold.y = 0.0
+		_gw_state = GWState.HOLD if to_hold.length() <= _HOLD_RADIUS * 3.0 else GWState.MARCH
+		return
+
+	var to_e := tgt.global_position - global_position
+	to_e.y = 0.0
+	if to_e.length() > _MELEE_RANGE:
+		var dir := to_e.normalized()
+		velocity.x = dir.x * MOVE_SPEED
+		velocity.z = dir.z * MOVE_SPEED
+		look_at(global_position + dir, Vector3.UP)
+		_gw_play(_GW_ANIM_WALK)
+	else:
+		velocity.x = 0.0; velocity.z = 0.0
+		look_at(tgt.global_position, Vector3.UP)
+		_attack_cd -= delta
+		if _attack_cd <= 0.0 and tgt.has_method(&"apply_sword_hit"):
+			_attack_cd = ATTACK_INTERVAL
+			SoundManager.play_one_shot(SoundManager.KEY_SWORD_SWING, 0.14, -4.0)
+			tgt.call(&"apply_sword_hit", melee_damage, self)
+			_deal_splash_damage(tgt)
+			_gw_play(_GW_ANIM_ATTACK, false)
+
+
+# ─── Damage reception ─────────────────────────────────────────────────────────
 
 func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 	hp -= damage
