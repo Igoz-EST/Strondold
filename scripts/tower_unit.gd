@@ -18,10 +18,7 @@ var upgrade_level := 1
 
 func _ready() -> void:
 	add_to_group(&"tower")
-	var lvl := GameState.tower_level
-	if has_meta(&"tower_level"):
-		lvl = int(get_meta(&"tower_level"))
-	apply_upgrade_level(lvl)
+	apply_upgrade_level(int(get_meta(&"tower_level", 1)))
 	_fire_cd = randf_range(0.0, fire_interval * 0.6)
 
 

@@ -59,6 +59,7 @@ signal pending_build_changed(is_pending: bool)
 signal building_levels_changed
 signal base_destroyed
 signal pause_menu_toggle_requested
+signal building_selected(building: Node3D)
 
 
 func request_pause_menu_toggle() -> void:
@@ -271,6 +272,29 @@ func buy_barracks_upgrade() -> bool:
 	_apply_level_to_group(&"barracks", barracks_level)
 	building_levels_changed.emit()
 	return true
+
+
+func buy_building_upgrade(building: Node3D) -> bool:
+	if not is_instance_valid(building): return false
+	var lvl: int = int(building.get(&"upgrade_level") if building.get(&"upgrade_level") != null else 1)
+	if lvl >= 3: return false
+	var cost_c := BUILDING_UPGRADE_COIN_COSTS[lvl]
+	var cost_o := BUILDING_UPGRADE_ORE_COSTS[lvl]
+	if not infinite_resources and (coins < cost_c or ore < cost_o): return false
+	spend_coins(cost_c)
+	if not infinite_resources:
+		ore -= cost_o
+		ore_changed.emit(ore)
+	if building.has_method(&"apply_upgrade_level"):
+		building.call(&"apply_upgrade_level", lvl + 1)
+	return true
+
+
+func can_afford_building_upgrade(building: Node3D) -> bool:
+	if not is_instance_valid(building): return false
+	var lvl: int = int(building.get(&"upgrade_level") if building.get(&"upgrade_level") != null else 1)
+	if lvl >= 3: return false
+	return infinite_resources or (coins >= BUILDING_UPGRADE_COIN_COSTS[lvl] and ore >= BUILDING_UPGRADE_ORE_COSTS[lvl])
 
 
 func _apply_level_to_group(group_name: StringName, level: int) -> void:

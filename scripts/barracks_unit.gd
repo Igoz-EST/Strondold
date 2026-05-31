@@ -15,10 +15,7 @@ var max_warriors := BASE_MAX_WARRIORS
 
 func _ready() -> void:
 	add_to_group(&"barracks")
-	var lvl := GameState.barracks_level
-	if has_meta(&"barracks_level"):
-		lvl = int(get_meta(&"barracks_level"))
-	apply_upgrade_level(lvl)
+	apply_upgrade_level(int(get_meta(&"barracks_level", 1)))
 	for slot: int in range(max_warriors):
 		_spawn_warrior_slot(slot)
 

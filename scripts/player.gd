@@ -440,6 +440,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					_clear_build_preview()
 					get_viewport().set_input_as_handled()
 				return
+		elif event.button_index == MOUSE_BUTTON_LEFT:
+			if get_viewport().gui_get_hovered_control() == null:
+				_try_select_building_raycast(event.position)
 
 	if _inside_base and event is InputEventMouseMotion and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		var mm := event as InputEventMouseMotion
@@ -969,3 +972,57 @@ func _update_king_animation(_delta: float) -> void:
 		_king_play(_kanim_walk)
 	else:
 		_king_play(_kanim_idle)
+
+
+## Phase-1: direct physics raycast on building collision.
+## Phase-2 fallback: ground-plane hit + XZ radius search (works for clicks near ground).
+func _try_select_building_raycast(screen_pos: Vector2) -> void:
+	# ── Phase 1: physics ray ─────────────────────────────────────────────────
+	var from := _commander_cam.project_ray_origin(screen_pos)
+	var dir  := _commander_cam.project_ray_normal(screen_pos)
+
+	var query := PhysicsRayQueryParameters3D.create(from, from + dir * 600.0)
+	query.collision_mask = 1   # buildings and ground share layer 1
+
+	var result := get_world_3d().direct_space_state.intersect_ray(query)
+	if not result.is_empty():
+		var found := _building_from_collider(result.get("collider"))
+		if found != null:
+			print("Selected " + ("Tower" if found.is_in_group(&"tower") else "Barracks"))
+			GameState.building_selected.emit(found)
+			return
+
+	# ── Phase 2: fallback — ground plane + XZ radius ─────────────────────────
+	var gp: Variant = _commander_ground_hit(screen_pos)
+	if gp == null:
+		return
+	_try_select_building_radius(gp as Vector3)
+
+
+func _building_from_collider(collider: Object) -> Node3D:
+	## Walk up the scene tree from the collider until we find a building node.
+	var n := collider as Node
+	while n != null:
+		if n is Node3D:
+			var n3 := n as Node3D
+			if n3.is_in_group(&"tower") or n3.is_in_group(&"barracks"):
+				return n3
+		n = n.get_parent()
+	return null
+
+
+func _try_select_building_radius(world_pos: Vector3) -> void:
+	const PICK_R2 := 100.0   # 10-unit XZ radius
+	var best: Node3D = null
+	var best_d2 := PICK_R2
+	for grp in [&"tower", &"barracks"]:
+		for n in get_tree().get_nodes_in_group(grp):
+			if not (n is Node3D) or not is_instance_valid(n): continue
+			var np := (n as Node3D).global_position
+			var dx := world_pos.x - np.x
+			var dz := world_pos.z - np.z
+			var d2 := dx * dx + dz * dz
+			if d2 < best_d2: best_d2 = d2; best = n as Node3D
+	if best != null:
+		print("Selected " + ("Tower" if best.is_in_group(&"tower") else "Barracks"))
+		GameState.building_selected.emit(best)

@@ -82,8 +82,12 @@ var _tower_button: Button
 var _barracks_button: Button
 var _warehouse_button: Button
 var _dmg_upgrade_button: Button
-var _tower_upgrade_button: Button
-var _barracks_upgrade_button: Button
+var _bld_panel_layer:      CanvasLayer
+var _bld_panel_container:  PanelContainer
+var _bld_selected:         Node3D = null
+var _bld_title_lbl:        Label
+var _bld_upgrade_btn:      Button
+var _selection_ring:       Node3D = null
 var _wood_label: Label
 var _market_buttons: Array[Button] = []
 var _buy_worker_button: Button
@@ -166,6 +170,9 @@ func _ready() -> void:
 	GameState.commander_mode_changed.connect(_on_commander_mode)
 	GameState.pending_build_changed.connect(_on_pending_build)
 	GameState.building_levels_changed.connect(_refresh_upgrade_buttons)
+	GameState.building_selected.connect(_open_building_panel)
+	GameState.coins_changed.connect(_on_bld_coins_changed)
+	GameState.ore_changed.connect(_on_bld_coins_changed)
 	_on_coins_changed(GameState.coins)
 	_refresh_ore_labels()
 	_on_base_hp_changed(GameState.base_hp, GameState.BASE_MAX_HP)
@@ -500,23 +507,7 @@ func _setup_commander_build_ui() -> void:
 	_dmg_upgrade_button.pressed.connect(_on_dmg_upgrade_pressed)
 	row_up.add_child(_dmg_upgrade_button)
 
-	_tower_upgrade_button = Button.new()
-	_tower_upgrade_button.focus_mode = Control.FOCUS_NONE
-	_tower_upgrade_button.custom_minimum_size = Vector2(132, 96)
-	_tower_upgrade_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	UiStyle.style_button(_tower_upgrade_button, 13)
-	_tower_upgrade_button.tooltip_text = "Globally upgrades all towers: range, fire rate, and damage."
-	_tower_upgrade_button.pressed.connect(_on_tower_upgrade_pressed)
-	row_up.add_child(_tower_upgrade_button)
-
-	_barracks_upgrade_button = Button.new()
-	_barracks_upgrade_button.focus_mode = Control.FOCUS_NONE
-	_barracks_upgrade_button.custom_minimum_size = Vector2(132, 96)
-	_barracks_upgrade_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	UiStyle.style_button(_barracks_upgrade_button, 13)
-	_barracks_upgrade_button.tooltip_text = "Globally upgrades all barracks and warriors."
-	_barracks_upgrade_button.pressed.connect(_on_barracks_upgrade_pressed)
-	row_up.add_child(_barracks_upgrade_button)
+	# Tower and Barracks upgrades are now per-building (click a building in Commander Mode)
 
 	var market_tab := MarginContainer.new()
 	market_tab.name = "Market"
@@ -588,6 +579,7 @@ func _setup_commander_build_ui() -> void:
 	_build_casino_tab(tabs)
 
 	bar.offset_top = -240.0
+	_setup_building_panel()
 	_on_coins_changed(GameState.coins)
 	_refresh_ore_labels()
 	_refresh_workers_ui()
@@ -611,14 +603,6 @@ func _on_dmg_upgrade_pressed() -> void:
 	_refresh_upgrade_buttons()
 
 
-func _on_tower_upgrade_pressed() -> void:
-	GameState.buy_tower_upgrade()
-	_refresh_upgrade_buttons()
-
-
-func _on_barracks_upgrade_pressed() -> void:
-	GameState.buy_barracks_upgrade()
-	_refresh_upgrade_buttons()
 
 
 func _add_market_button(parent: Node, text: String, coin_delta: int, wood_delta: int, ore_delta: int) -> void:
@@ -679,24 +663,8 @@ func _refresh_workers_ui() -> void:
 
 
 func _refresh_upgrade_buttons() -> void:
-	if _tower_upgrade_button:
-		if GameState.tower_level >= 3:
-			_tower_upgrade_button.text = "🏰 🔼\nTOWER\nLVL 3\nMAX"
-			_tower_upgrade_button.disabled = true
-		else:
-			var tower_cost := GameState.get_tower_upgrade_cost()
-			var tower_ore := GameState.get_tower_upgrade_ore_cost()
-			_tower_upgrade_button.text = "🏰 🔼\nLVL %d -> %d\n%d coins\n%d ore" % [GameState.tower_level, GameState.tower_level + 1, tower_cost, tower_ore]
-			_tower_upgrade_button.disabled = GameState.coins < tower_cost or GameState.ore < tower_ore
-	if _barracks_upgrade_button:
-		if GameState.barracks_level >= 3:
-			_barracks_upgrade_button.text = "🛖 🔼\nBARRACKS\nLVL 3\nMAX"
-			_barracks_upgrade_button.disabled = true
-		else:
-			var barracks_cost := GameState.get_barracks_upgrade_cost()
-			var barracks_ore := GameState.get_barracks_upgrade_ore_cost()
-			_barracks_upgrade_button.text = "🛖 🔼\nLVL %d -> %d\n%d coins\n%d ore" % [GameState.barracks_level, GameState.barracks_level + 1, barracks_cost, barracks_ore]
-			_barracks_upgrade_button.disabled = GameState.coins < barracks_cost or GameState.ore < barracks_ore
+	if _dmg_upgrade_button:
+		_dmg_upgrade_button.disabled = GameState.coins < GameState.DMG_UPGRADE_COST
 
 
 func _refresh_market_buttons() -> void:
@@ -1622,3 +1590,160 @@ func _casino_try_spawn_giant() -> void:
 	add_child(gw)
 	gw.global_position = Vector3(8.0, 0.0, 3.0)
 	GameState.has_giant_warrior = true
+
+
+# ─── BUILDING UPGRADE PANEL ───────────────────────────────────────────────────
+
+func _setup_building_panel() -> void:
+	_bld_panel_layer = CanvasLayer.new()
+	_bld_panel_layer.name    = "BuildingPanel"
+	_bld_panel_layer.layer   = 50
+	_bld_panel_layer.visible = false
+	add_child(_bld_panel_layer)
+
+	# Absolute positioning — anchors all at 0 (top-left), position set dynamically
+	_bld_panel_container = PanelContainer.new()
+	_bld_panel_container.anchor_left   = 0.0
+	_bld_panel_container.anchor_right  = 0.0
+	_bld_panel_container.anchor_top    = 0.0
+	_bld_panel_container.anchor_bottom = 0.0
+	_bld_panel_container.custom_minimum_size = Vector2(260, 0)
+	_bld_panel_container.mouse_filter  = Control.MOUSE_FILTER_STOP
+	_bld_panel_container.add_theme_stylebox_override(&"panel", UiStyle.panel_style())
+	_bld_panel_layer.add_child(_bld_panel_container)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	_bld_panel_container.add_child(col)
+
+	_bld_title_lbl = Label.new()
+	_bld_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_label(_bld_title_lbl, UiStyle.TEXT_MAIN, 16, 3)
+	col.add_child(_bld_title_lbl)
+
+	_bld_upgrade_btn = Button.new()
+	_bld_upgrade_btn.focus_mode = Control.FOCUS_NONE
+	_bld_upgrade_btn.custom_minimum_size = Vector2(230, 44)
+	UiStyle.style_button(_bld_upgrade_btn, 14)
+	_bld_upgrade_btn.pressed.connect(_on_bld_upgrade_pressed)
+	col.add_child(_bld_upgrade_btn)
+
+	var close_btn := Button.new()
+	close_btn.text = "✕ Close"
+	close_btn.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(close_btn, 13)
+	close_btn.pressed.connect(_close_building_panel)
+	col.add_child(close_btn)
+
+	_create_selection_ring()
+
+
+func _open_building_panel(building: Node3D) -> void:
+	if not is_instance_valid(building): return
+	if _bld_panel_layer == null: return
+	_bld_selected = building
+	_bld_panel_layer.visible = true
+	_refresh_building_panel()
+	_position_building_panel(building)
+	_show_selection_ring(building)
+
+
+func _close_building_panel() -> void:
+	if _bld_panel_layer != null: _bld_panel_layer.visible = false
+	_bld_selected = null
+	_hide_selection_ring()
+
+
+func _position_building_panel(building: Node3D) -> void:
+	if _bld_panel_container == null: return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null or not is_instance_valid(cam): return
+
+	# Project building position (+2u up to hit visible center) to screen coords
+	var screen_pos := cam.unproject_position(building.global_position + Vector3(0.0, 2.0, 0.0))
+	var vp         := get_viewport().get_visible_rect().size
+	const PANEL_W  := 280.0
+	const PANEL_H  := 180.0   # estimated; PanelContainer auto-grows
+	const MARGIN   := 12.0
+	const BOT_UI   := 250.0   # height of bottom commander build panel
+
+	# Try right of building; fall back to left if it clips the screen edge
+	var x := screen_pos.x + 50.0
+	if x + PANEL_W > vp.x - MARGIN:
+		x = screen_pos.x - PANEL_W - 50.0
+
+	# Vertically centered on building, clamped above bottom UI
+	var y := screen_pos.y - PANEL_H * 0.5
+	y = clampf(y, MARGIN, vp.y - BOT_UI - PANEL_H - MARGIN)
+
+	# Final horizontal clamp
+	x = clampf(x, MARGIN, vp.x - PANEL_W - MARGIN)
+
+	_bld_panel_container.position = Vector2(x, y)
+
+
+func _refresh_building_panel() -> void:
+	if _bld_panel_layer == null or not _bld_panel_layer.visible: return
+	if not is_instance_valid(_bld_selected): _close_building_panel(); return
+
+	var lvl: int = int(_bld_selected.get(&"upgrade_level") if _bld_selected.get(&"upgrade_level") != null else 1)
+	var is_tower   := _bld_selected.is_in_group(&"tower")
+	var type_str   := "Tower" if is_tower else "Barracks"
+	_bld_title_lbl.text = "%s  (Level %d / 3)" % [type_str, lvl]
+
+	if lvl >= 3:
+		_bld_upgrade_btn.text     = "⬆ Max Level"
+		_bld_upgrade_btn.disabled = true
+	else:
+		var cc := GameState.BUILDING_UPGRADE_COIN_COSTS[lvl]
+		var oc := GameState.BUILDING_UPGRADE_ORE_COSTS[lvl]
+		_bld_upgrade_btn.text     = "⬆ Lv%d → Lv%d  (%dc / %do)" % [lvl, lvl+1, cc, oc]
+		_bld_upgrade_btn.disabled = not GameState.can_afford_building_upgrade(_bld_selected)
+
+
+func _create_selection_ring() -> void:
+	_selection_ring = Node3D.new()
+	_selection_ring.name    = "SelectionRing"
+	_selection_ring.visible = false
+	add_child(_selection_ring)
+
+	# Glowing flat disc as ground ring — outer edge visible around building base
+	var mi  := MeshInstance3D.new()
+	var cm  := CylinderMesh.new()
+	cm.top_radius    = 5.0
+	cm.bottom_radius = 5.0
+	cm.height        = 0.08
+	cm.radial_segments = 32
+	mi.mesh  = cm
+	mi.position.y = 0.05
+	mi.cast_shadow = MeshInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color             = Color(1.0, 0.88, 0.15, 0.65)
+	mat.transparency             = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.emission_enabled         = true
+	mat.emission                 = Color(1.0, 0.90, 0.25)
+	mat.emission_energy_multiplier = 1.8
+	mat.cull_mode                = BaseMaterial3D.CULL_DISABLED
+	mat.depth_draw_mode          = BaseMaterial3D.DEPTH_DRAW_ALWAYS
+	mi.set_surface_override_material(0, mat)
+	_selection_ring.add_child(mi)
+
+
+func _show_selection_ring(building: Node3D) -> void:
+	if _selection_ring == null or not is_instance_valid(building): return
+	_selection_ring.global_position = building.global_position
+	_selection_ring.visible         = true
+
+
+func _hide_selection_ring() -> void:
+	if _selection_ring != null: _selection_ring.visible = false
+
+
+func _on_bld_upgrade_pressed() -> void:
+	if not is_instance_valid(_bld_selected): return
+	GameState.buy_building_upgrade(_bld_selected)
+	_refresh_building_panel()
+
+
+func _on_bld_coins_changed(_n: int = 0) -> void:
+	_refresh_building_panel()
