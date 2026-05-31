@@ -10,14 +10,17 @@ var _damage: int = 12
 var _splash_damage: int = 0
 var _splash_radius: float = 0.0
 var _life: float = LIFETIME_SEC
+var _damage_type: int = 0   # 0 = PHYSICAL, 1 = MAGIC  (matches enemy.gd DamageType)
 
 
-func setup(from: Vector3, target: Node3D, damage: int, splash_damage: int = 0, splash_radius: float = 0.0) -> void:
+func setup(from: Vector3, target: Node3D, damage: int, splash_damage: int = 0,
+		splash_radius: float = 0.0, damage_type: int = 0) -> void:
 	global_position = from
-	_target = target
-	_damage = damage
+	_target       = target
+	_damage       = damage
 	_splash_damage = splash_damage
 	_splash_radius = splash_radius
+	_damage_type   = damage_type
 	_update_velocity()
 	body_entered.connect(_on_body_entered)
 
@@ -26,7 +29,7 @@ func _on_body_entered(body: Node3D) -> void:
 	if body == null or not is_instance_valid(body):
 		return
 	if body.has_method(&"apply_sword_hit"):
-		body.call(&"apply_sword_hit", _damage, self)
+		body.call(&"apply_sword_hit", _damage, self, _damage_type)
 		_apply_splash(body)
 	queue_free()
 
@@ -36,7 +39,7 @@ func _hit_target() -> void:
 		queue_free()
 		return
 	if _target.has_method(&"apply_sword_hit"):
-		_target.call(&"apply_sword_hit", _damage, self)
+		_target.call(&"apply_sword_hit", _damage, self, _damage_type)
 		_apply_splash(_target)
 	queue_free()
 
@@ -52,7 +55,7 @@ func _apply_splash(direct_body: Node3D) -> void:
 		if global_position.distance_squared_to(enemy.global_position) > r2:
 			continue
 		if enemy.has_method(&"apply_sword_hit"):
-			enemy.call(&"apply_sword_hit", _splash_damage, self)
+			enemy.call(&"apply_sword_hit", _splash_damage, self, _damage_type)
 
 
 func _update_velocity() -> void:
