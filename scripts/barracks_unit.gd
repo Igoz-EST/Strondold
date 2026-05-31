@@ -2,7 +2,7 @@ extends StaticBody3D
 
 const BASE_MAX_WARRIORS := 4
 const LEVEL_3_MAX_WARRIORS := 8
-const RESPAWN_SEC := 10.0
+const RESPAWN_SEC := 5.0
 
 const _WarriorScene := preload("res://scenes/warrior.tscn")
 

@@ -29,6 +29,7 @@ const AVATAR_SCALE := 0.92
 
 var hp: int = MAX_HP
 var max_hp: int = MAX_HP
+var _regen_acc := 0.0
 var upgrade_level := 1
 var melee_damage := MELEE_DAMAGE
 
@@ -292,6 +293,16 @@ func _pick_enemy() -> Node3D:
 func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
+
+	# 2% of max HP per second regeneration
+	if hp < max_hp:
+		_regen_acc += float(max_hp) * 0.02 * delta
+		if _regen_acc >= 1.0:
+			var gain := int(_regen_acc)
+			hp = mini(hp + gain, max_hp)
+			_regen_acc -= float(gain)
+			if is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
+				_hp_bar.call(&"set_hp", hp, max_hp)
 
 	if _duel_enemy != null and not is_instance_valid(_duel_enemy):
 		_duel_enemy = null
