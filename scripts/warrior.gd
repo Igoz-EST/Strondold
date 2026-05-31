@@ -309,7 +309,10 @@ func _physics_process(delta: float) -> void:
 
 	var rally := global_position
 	if is_instance_valid(_barracks):
-		rally = _barracks.global_position + _rally_offset + Vector3(0.0, 0.55, 0.0)
+		if _barracks.has_method(&"get_rally_pos"):
+			rally = _barracks.call(&"get_rally_pos", _slot_index)
+		else:
+			rally = _barracks.global_position + _rally_offset + Vector3(0.0, 0.55, 0.0)
 
 	var tgt := _pick_enemy()
 	if tgt != null:

@@ -87,6 +87,7 @@ var _bld_panel_container:  PanelContainer
 var _bld_selected:         Node3D = null
 var _bld_title_lbl:        Label
 var _bld_upgrade_btn:      Button
+var _bld_flag_btn:         Button
 var _selection_ring:       Node3D = null
 var _wood_label: Label
 var _market_buttons: Array[Button] = []
@@ -173,6 +174,7 @@ func _ready() -> void:
 	GameState.building_selected.connect(_open_building_panel)
 	GameState.coins_changed.connect(_on_bld_coins_changed)
 	GameState.ore_changed.connect(_on_bld_coins_changed)
+	GameState.flag_placement_changed.connect(_refresh_building_panel)
 	_on_coins_changed(GameState.coins)
 	_refresh_ore_labels()
 	_on_base_hp_changed(GameState.base_hp, GameState.BASE_MAX_HP)
@@ -730,6 +732,10 @@ func _on_commander_mode(active: bool) -> void:
 		_setup_commander_build_ui()
 	if _build_layer:
 		_build_layer.visible = active
+	if not active:
+		# Clean up all Commander UI state when leaving Commander Mode
+		_close_building_panel()
+		GameState.cancel_flag_placement()
 
 
 func _on_pending_build(pending: bool) -> void:
@@ -1628,6 +1634,14 @@ func _setup_building_panel() -> void:
 	_bld_upgrade_btn.pressed.connect(_on_bld_upgrade_pressed)
 	col.add_child(_bld_upgrade_btn)
 
+	_bld_flag_btn = Button.new()
+	_bld_flag_btn.text = "🚩 Set Rally Flag"
+	_bld_flag_btn.focus_mode = Control.FOCUS_NONE
+	_bld_flag_btn.custom_minimum_size = Vector2(230, 44)
+	UiStyle.style_button(_bld_flag_btn, 14)
+	_bld_flag_btn.pressed.connect(_on_bld_flag_pressed)
+	col.add_child(_bld_flag_btn)
+
 	var close_btn := Button.new()
 	close_btn.text = "✕ Close"
 	close_btn.focus_mode = Control.FOCUS_NONE
@@ -1690,6 +1704,13 @@ func _refresh_building_panel() -> void:
 	var is_tower   := _bld_selected.is_in_group(&"tower")
 	var type_str   := "Tower" if is_tower else "Barracks"
 	_bld_title_lbl.text = "%s  (Level %d / 3)" % [type_str, lvl]
+	if _bld_flag_btn != null:
+		_bld_flag_btn.visible = not is_tower  # Flag only for Barracks
+		if not is_tower:
+			var placing := GameState.flag_placement_mode and \
+				GameState.flag_placement_barracks == _bld_selected
+			_bld_flag_btn.text     = "🚩 Placing… (click to set)" if placing else "🚩 Set Rally Flag"
+			_bld_flag_btn.disabled = placing
 
 	if lvl >= 3:
 		_bld_upgrade_btn.text     = "⬆ Max Level"
@@ -1743,6 +1764,12 @@ func _on_bld_upgrade_pressed() -> void:
 	if not is_instance_valid(_bld_selected): return
 	GameState.buy_building_upgrade(_bld_selected)
 	_refresh_building_panel()
+
+
+func _on_bld_flag_pressed() -> void:
+	if not is_instance_valid(_bld_selected): return
+	GameState.begin_flag_placement(_bld_selected)
+	# Panel stays open — _refresh_building_panel via flag_placement_changed signal
 
 
 func _on_bld_coins_changed(_n: int = 0) -> void:

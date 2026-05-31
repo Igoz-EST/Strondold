@@ -50,7 +50,9 @@ const DEFAULT_COLLISION_MASK := 33 | LAYER_ENEMY
 
 var _enter_commander_hint: Label
 
-var _inside_base := false
+var _inside_base    := false
+var _flag_ring:    Node3D          = null   # radius circle for flag placement
+var _flag_cursor:  MeshInstance3D  = null   # cursor indicator (green/red)
 var _in_command_zone := false
 var _commander_focus := Vector3.ZERO
 var _commander_yaw := 0.0
@@ -426,6 +428,25 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 
+	# ── Flag placement mode ────────────────────────────────────────────────────
+	if _inside_base and event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT and GameState.flag_placement_mode:
+			# Always consume the click (never fall through to building selection)
+			get_viewport().set_input_as_handled()
+			if get_viewport().gui_get_hovered_control() == null:
+				var gp: Variant = _commander_ground_hit(event.position)
+				if gp != null:
+					var barracks := GameState.flag_placement_barracks
+					if is_instance_valid(barracks):
+						const MAX_D := 28.0
+						if barracks.global_position.distance_to(gp as Vector3) <= MAX_D:
+							# Inside radius: place flag and end mode
+							if barracks.has_method(&"set_rally_flag"):
+								barracks.call(&"set_rally_flag", gp as Vector3)
+							GameState.cancel_flag_placement()
+						# Outside radius: ignore (mode stays active)
+			return
+
 	if _inside_base and event is InputEventMouseButton and event.pressed:
 		if GameState.awaiting_build_type != GameState.BUILD_NONE:
 			if event.button_index == MOUSE_BUTTON_RIGHT:
@@ -460,7 +481,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event.is_action_pressed(&"ui_cancel"):
 		if _inside_base:
-			if GameState.awaiting_build_type != GameState.BUILD_NONE:
+			if GameState.flag_placement_mode:
+				GameState.cancel_flag_placement()
+			elif GameState.awaiting_build_type != GameState.BUILD_NONE:
 				GameState.cancel_tower_blueprint()
 			else:
 				_exit_commander_mode()
@@ -972,6 +995,96 @@ func _update_king_animation(_delta: float) -> void:
 		_king_play(_kanim_walk)
 	else:
 		_king_play(_kanim_idle)
+
+
+## ── Flag placement visuals ────────────────────────────────────────────────────
+
+func _process(_delta: float) -> void:
+	if not _inside_base or not GameState.flag_placement_mode:
+		_flag_visuals_hide()
+		return
+
+	var barracks := GameState.flag_placement_barracks
+	if not is_instance_valid(barracks):
+		_flag_visuals_hide()
+		return
+
+	# Create ring if missing
+	if _flag_ring == null:
+		_flag_ring = _make_flag_radius_ring()
+		get_parent().add_child(_flag_ring)
+	_flag_ring.visible = true
+	_flag_ring.global_position = Vector3(barracks.global_position.x,
+		0.05, barracks.global_position.z)
+
+	# Create cursor if missing
+	if _flag_cursor == null:
+		_flag_cursor = _make_flag_cursor()
+		get_parent().add_child(_flag_cursor)
+
+	var mouse := get_viewport().get_mouse_position()
+	var gp: Variant = _commander_ground_hit(mouse)
+	if gp != null:
+		var wp := gp as Vector3
+		var inside := barracks.global_position.distance_to(wp) <= 28.0
+		_flag_cursor.visible = true
+		_flag_cursor.global_position = wp + Vector3(0.0, 0.12, 0.0)
+		var mat := _flag_cursor.get_surface_override_material(0) as StandardMaterial3D
+		if mat != null:
+			mat.albedo_color = Color(0.15, 0.90, 0.25, 0.85) if inside \
+				else Color(0.90, 0.15, 0.12, 0.85)
+			mat.emission = mat.albedo_color.darkened(0.3)
+	else:
+		if _flag_cursor != null: _flag_cursor.visible = false
+
+
+func _flag_visuals_hide() -> void:
+	if _flag_ring   != null: _flag_ring.visible   = false
+	if _flag_cursor != null: _flag_cursor.visible = false
+
+
+func _make_flag_radius_ring() -> Node3D:
+	const R      := 28.0
+	const SEGS   := 48
+	var root := Node3D.new(); root.name = "FlagRadiusRing"
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color             = Color(0.95, 0.85, 0.15, 0.70)
+	mat.transparency             = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.emission_enabled         = true
+	mat.emission                 = Color(1.0, 0.90, 0.20)
+	mat.emission_energy_multiplier = 1.4
+	mat.cull_mode                = BaseMaterial3D.CULL_DISABLED
+	mat.depth_draw_mode          = BaseMaterial3D.DEPTH_DRAW_ALWAYS
+	for i in SEGS:
+		var a0 := float(i)       / SEGS * TAU
+		var a1 := float(i + 1)  / SEGS * TAU
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.28, 0.10, R * TAU / SEGS * 0.88)
+		mi.mesh = bm
+		mi.position = Vector3(cos(a0) * R, 0.0, sin(a0) * R)
+		mi.rotation.y = -a0
+		mi.set_surface_override_material(0, mat)
+		mi.cast_shadow = MeshInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(mi)
+	return root
+
+
+func _make_flag_cursor() -> MeshInstance3D:
+	var mi  := MeshInstance3D.new()
+	var sm  := SphereMesh.new()
+	sm.radius = 0.55; sm.height = 1.1
+	mi.mesh = sm
+	mi.cast_shadow = MeshInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color             = Color(0.15, 0.90, 0.25, 0.85)
+	mat.transparency             = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.emission_enabled         = true
+	mat.emission                 = Color(0.10, 0.75, 0.20)
+	mat.emission_energy_multiplier = 1.0
+	mat.cull_mode                = BaseMaterial3D.CULL_DISABLED
+	mi.set_surface_override_material(0, mat)
+	return mi
 
 
 ## Phase-1: direct physics raycast on building collision.

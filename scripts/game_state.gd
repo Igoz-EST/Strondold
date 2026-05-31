@@ -49,6 +49,8 @@ var game_mode: int = GAME_MODE_MISSION
 var has_giant_warrior: bool = false
 var infinite_resources: bool = false
 var unbreakable_base:   bool = false
+var flag_placement_mode:     bool    = false
+var flag_placement_barracks: Node3D = null
 
 signal coins_changed(new_total: int)
 signal ore_changed(new_total: int)
@@ -60,6 +62,7 @@ signal building_levels_changed
 signal base_destroyed
 signal pause_menu_toggle_requested
 signal building_selected(building: Node3D)
+signal flag_placement_changed
 
 
 func request_pause_menu_toggle() -> void:
@@ -121,8 +124,10 @@ func reset_run() -> void:
 	awaiting_build_type = BUILD_NONE
 	base_hp = BASE_MAX_HP
 	has_giant_warrior  = false
-	infinite_resources = false
-	unbreakable_base   = false
+	infinite_resources       = false
+	unbreakable_base         = false
+	flag_placement_mode      = false
+	flag_placement_barracks  = null
 	coins_changed.emit(coins)
 	ore_changed.emit(ore)
 	wood_changed.emit(wood)
@@ -272,6 +277,18 @@ func buy_barracks_upgrade() -> bool:
 	_apply_level_to_group(&"barracks", barracks_level)
 	building_levels_changed.emit()
 	return true
+
+
+func begin_flag_placement(barracks: Node3D) -> void:
+	flag_placement_mode     = true
+	flag_placement_barracks = barracks
+	flag_placement_changed.emit()
+
+
+func cancel_flag_placement() -> void:
+	flag_placement_mode     = false
+	flag_placement_barracks = null
+	flag_placement_changed.emit()
 
 
 func buy_building_upgrade(building: Node3D) -> bool:
