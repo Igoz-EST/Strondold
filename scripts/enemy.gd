@@ -75,7 +75,7 @@ func configure(kind_in: int, stat_multiplier: float = 1.0, size_multiplier: floa
 			scale = Vector3(2.0, 2.0, 2.0)
 		Kind.BOSS:
 			move_speed = 1.8;  damage_to_base = 100; max_hp = 400
-			scale = Vector3(0.06, 0.06, 0.06)
+			# No node scale — visual scale applied to _model only in _load_model()
 		Kind.GOLEM:
 			move_speed          = 4.5
 			damage_to_base      = 10
@@ -117,7 +117,9 @@ func _load_model() -> void:
 	_model = scene.instantiate() as Node3D
 	if _model == null:
 		return
-	_model.scale            = Vector3.ONE * _MODEL_SCALE
+	# For BOSS: scale only the visual mesh, not the node (preserves hitbox/HP bar)
+	var vis_scale := 0.06 if kind == Kind.BOSS else _MODEL_SCALE
+	_model.scale            = Vector3.ONE * vis_scale
 	_model.position         = Vector3.ZERO
 	_model.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 	add_child(_model)
