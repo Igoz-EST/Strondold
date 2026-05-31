@@ -2,8 +2,16 @@ extends CharacterBody3D
 
 const _HumanoidAvatarBuilder := preload("res://scripts/humanoid_avatar_builder.gd")
 
-## Слой 10 (512) — не меч игрока (256) и не враг.
 const LAYER_WARRIOR := 512
+
+# GLB models for each barracks level
+const _MODEL_L1 := "res://assets/models/azure_sentinel_-_low-poly_blue_knight.glb"
+const _MODEL_L3 := "res://assets/models/lowpoly_angel_knight.glb"
+
+# Knight animation names (azure sentinel + lowpoly angel knight both use same prefix)
+const _W_ANIM_IDLE   := ["Knight 01|Idle", "Knight 01|HoldShield", "Idle"]
+const _W_ANIM_WALK   := ["Knight 01|Walk", "Walk"]
+const _W_ANIM_ATTACK := ["Knight 01|Stab", "Knight 01|RaiseShield", "Attack", "Stab"]
 
 const GRAVITY := 30.0
 ## Как у башни (`tower_unit.FIRE_RANGE`).
@@ -33,6 +41,9 @@ var _duel_enemy: CharacterBody3D = null
 
 var _attack_cd := 0.0
 var _hp_bar: Node = null
+
+var _warrior_model: Node3D         = null
+var _warrior_anim:  AnimationPlayer = null
 
 @onready var _avatar_root: Node3D = $AvatarRoot
 
@@ -96,9 +107,12 @@ func _ready() -> void:
 		if _barracks.has_meta(&"barracks_level"):
 			lvl = int(_barracks.get_meta(&"barracks_level"))
 		apply_upgrade_level(lvl)
+	else:
+		_load_warrior_model()
 
 
 func apply_upgrade_level(level: int) -> void:
+	var prev := upgrade_level
 	upgrade_level = clampi(level, 1, 3)
 	var old_max := max_hp
 	var stat_mult := 2 if upgrade_level >= 2 else 1
@@ -108,10 +122,19 @@ func apply_upgrade_level(level: int) -> void:
 		hp = max_hp
 	else:
 		hp = mini(max_hp, hp + max_hp - old_max)
-	scale = Vector3.ONE * (1.08 if upgrade_level >= 2 else 1.0)
+	# Node scale stays 1.0 — model child handles visual size per level
+	scale = Vector3.ONE
 	_apply_level_visuals()
 	if _hp_bar != null and is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
 		_hp_bar.call(&"set_hp", hp, max_hp)
+	# Reload if no model yet, or if crossing the L3 model boundary
+	var need_reload := _warrior_model == null or (
+		prev != upgrade_level and (
+			(prev < 3 and upgrade_level == 3) or (prev == 3 and upgrade_level < 3)))
+	if need_reload:
+		_load_warrior_model()
+	elif _warrior_model != null:
+		_warrior_model.scale = Vector3.ONE * (1.5 if upgrade_level == 2 else 1.0)
 
 
 func _apply_level_visuals() -> void:
@@ -141,6 +164,53 @@ func _add_level_box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -
 	mat.roughness = 0.58
 	mesh_i.set_surface_override_material(0, mat)
 	parent.add_child(mesh_i)
+
+
+func _load_warrior_model() -> void:
+	if _warrior_model != null and is_instance_valid(_warrior_model):
+		_warrior_model.queue_free()
+		_warrior_model = null
+		_warrior_anim  = null
+	var path := _MODEL_L3 if upgrade_level >= 3 else _MODEL_L1
+	if not ResourceLoader.exists(path):
+		return
+	var scene := load(path) as PackedScene
+	if scene == null:
+		return
+	_warrior_model = scene.instantiate() as Node3D
+	if _warrior_model == null:
+		return
+	# GLB/GLTF models face -Z by default (GLTF spec), matching Godot's forward axis
+	_warrior_model.rotation_degrees = Vector3(0.0, 0.0, 0.0)
+	_warrior_model.scale = Vector3.ONE * (1.5 if upgrade_level == 2 else 1.0)
+	add_child(_warrior_model)
+	_avatar_root.visible = false
+	_warrior_anim = _find_warrior_anim_player(_warrior_model)
+	if _warrior_anim:
+		_w_play(_W_ANIM_IDLE)
+
+
+func _find_warrior_anim_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for c in node.get_children():
+		var found := _find_warrior_anim_player(c)
+		if found:
+			return found
+	return null
+
+
+func _w_play(names: Array, loop: bool = true) -> void:
+	if _warrior_anim == null:
+		return
+	for n in names:
+		if _warrior_anim.has_animation(n):
+			if _warrior_anim.current_animation != n or not _warrior_anim.is_playing():
+				var anim := _warrior_anim.get_animation(n)
+				if anim:
+					anim.loop_mode = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
+				_warrior_anim.play(n)
+			return
 
 
 func _build_shield(arm: Node3D) -> void:
@@ -240,6 +310,7 @@ func _physics_process(delta: float) -> void:
 			velocity.x = dir.x * MOVE_SPEED
 			velocity.z = dir.z * MOVE_SPEED
 			look_at(global_position + dir, Vector3.UP)
+			_w_play(_W_ANIM_WALK)
 		else:
 			velocity.x = 0.0
 			velocity.z = 0.0
@@ -249,6 +320,7 @@ func _physics_process(delta: float) -> void:
 				_attack_cd = ATTACK_INTERVAL
 				SoundManager.play_one_shot(SoundManager.KEY_SWORD_SWING, 0.14, -4.0)
 				tgt.call(&"apply_sword_hit", melee_damage)
+				_w_play(_W_ANIM_ATTACK, false)
 	else:
 		var to_r := rally - global_position
 		to_r.y = 0.0
@@ -258,8 +330,10 @@ func _physics_process(delta: float) -> void:
 			velocity.x = rdir.x * MOVE_SPEED
 			velocity.z = rdir.z * MOVE_SPEED
 			look_at(global_position + rdir, Vector3.UP)
+			_w_play(_W_ANIM_WALK)
 		else:
 			velocity.x = 0.0
 			velocity.z = 0.0
+			_w_play(_W_ANIM_IDLE)
 
 	move_and_slide()

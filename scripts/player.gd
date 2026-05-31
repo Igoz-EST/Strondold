@@ -18,6 +18,9 @@ const COMMANDER_ZOOM_MAX := 1.75
 const COMMANDER_ZOOM_STEP := 0.12
 
 const _HumanoidAvatarBuilder := preload("res://scripts/humanoid_avatar_builder.gd")
+const _KING_MODEL_PATH     := "res://assets/models/King.fbx"
+const _KING_SCALE          := 1.0
+const _AVATAR_FEET_ALIGN_Y := -0.46
 const _TowerFactory := preload("res://scripts/tower_scene.gd")
 const _BarracksFactory := preload("res://scripts/barracks_scene.gd")
 const _WarehouseFactory := preload("res://scripts/warehouse_scene.gd")
@@ -75,6 +78,15 @@ var _hit_box: BoxShape3D
 ## One damage per breakable per swing (hitbox can overlap several frames).
 var _hit_ids_this_swing: Dictionary = {}
 
+var _king_model:   Node3D          = null
+var _king_anim:    AnimationPlayer = null
+var _punch_right   := true
+var _kanim_idle    := ""
+var _kanim_walk    := ""
+var _kanim_run     := ""
+var _kanim_punch_r := ""
+var _kanim_punch_l := ""
+
 var _leg_l: Node3D
 var _leg_r: Node3D
 var _arm_l: Node3D
@@ -87,6 +99,7 @@ func _ready() -> void:
 	_setup_avatar_visual()
 	_setup_sword_visuals()
 	_setup_sword_hitbox()
+	_load_king_model()
 	if not InputMap.has_action(&"jump"):
 		InputMap.add_action(&"jump")
 		var space := InputEventKey.new()
@@ -141,6 +154,14 @@ func _deferred_release_focus() -> void:
 
 
 func _setup_avatar_visual() -> void:
+	if ResourceLoader.exists(_KING_MODEL_PATH):
+		# King model will replace the avatar — just need a dummy ArmR for sword attachment
+		var arm := Node3D.new()
+		arm.name = &"ArmR"
+		arm.position = Vector3(0.26, 0.24, 0.0)
+		_avatar_root.add_child(arm)
+		_arm_r = arm
+		return
 	_HumanoidAvatarBuilder.build(_avatar_root, Color(0.15, 0.52, 0.92), false, 1.0)
 	_leg_l = _avatar_root.get_node_or_null("LegL") as Node3D
 	_leg_r = _avatar_root.get_node_or_null("LegR") as Node3D
@@ -224,6 +245,13 @@ func _setup_sword_visuals() -> void:
 	_swing_pivot = Node3D.new()
 	_swing_pivot.name = "SwingPivot"
 	_sword_hilt.add_child(_swing_pivot)
+
+	# King model replaces sword — no visual meshes needed
+	if ResourceLoader.exists(_KING_MODEL_PATH):
+		_swing_arc = MeshInstance3D.new()
+		_swing_arc.visible = false
+		_swing_pivot.add_child(_swing_arc)
+		return
 
 	var grip := MeshInstance3D.new()
 	var grip_mesh := CylinderMesh.new()
@@ -543,6 +571,7 @@ func _physics_process(delta: float) -> void:
 	var walk_grass := is_on_floor() and Vector2(velocity.x, velocity.z).length() > 0.2
 	SoundManager.set_grass_walk_loop(walk_grass)
 	_update_walk_animation(delta)
+	_update_king_animation(delta)
 	_update_sword_swing(delta)
 	_update_sword_hits()
 	var can_enter := (
@@ -575,6 +604,7 @@ func _try_start_swing() -> void:
 	_sword_swinging = true
 	_sword_swing_elapsed = 0.0
 	_swing_arc.visible = true
+	_king_trigger_punch()
 
 
 func _update_sword_swing(delta: float) -> void:
@@ -840,3 +870,102 @@ func _exit_commander_mode() -> void:
 	_commander_cam.current = false
 	_camera.current = true
 	call_deferred("_deferred_release_focus")
+
+
+# ─── KING MODEL ───────────────────────────────────────────────────────────────
+
+func _load_king_model() -> void:
+	if not ResourceLoader.exists(_KING_MODEL_PATH):
+		return
+	var scene := load(_KING_MODEL_PATH) as PackedScene
+	if scene == null:
+		return
+	_king_model = scene.instantiate() as Node3D
+	if _king_model == null:
+		return
+	_king_model.scale            = Vector3.ONE * _KING_SCALE
+	_king_model.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+	_king_model.position.y       = _AVATAR_FEET_ALIGN_Y
+	add_child(_king_model)
+
+	_king_anim = _king_find_anim_player(_king_model)
+	_king_discover_anims()
+	_king_play(_kanim_idle)
+
+
+func _king_find_anim_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for c in node.get_children():
+		var found := _king_find_anim_player(c)
+		if found:
+			return found
+	return null
+
+
+# Finds animation by keyword suffix — handles any armature prefix (e.g. "CharacterArmature|Idle" or just "Idle")
+func _king_find_anim(keyword: String) -> String:
+	if _king_anim == null:
+		return ""
+	for a in _king_anim.get_animation_list():
+		if a == keyword or a.ends_with("|" + keyword):
+			return a
+	return ""
+
+
+func _king_discover_anims() -> void:
+	_kanim_idle    = _king_find_anim("Idle")
+	_kanim_walk    = _king_find_anim("Walk")
+	_kanim_run     = _king_find_anim("Run")
+	_kanim_punch_r = _king_find_anim("Punch_Right")
+	_kanim_punch_l = _king_find_anim("Punch_Left")
+	# Fallback: if no directional punches, try generic Punch
+	if _kanim_punch_r.is_empty(): _kanim_punch_r = _king_find_anim("Punch")
+	if _kanim_punch_l.is_empty(): _kanim_punch_l = _kanim_punch_r
+
+
+func _king_play(anim_name: String, loop: bool = true) -> void:
+	if _king_anim == null or anim_name.is_empty():
+		return
+	if _king_anim.current_animation == anim_name and _king_anim.is_playing():
+		return
+	var anim := _king_anim.get_animation(anim_name)
+	if anim:
+		anim.loop_mode = Animation.LOOP_LINEAR if loop else Animation.LOOP_NONE
+	_king_anim.play(anim_name)
+
+
+func _king_trigger_punch() -> void:
+	if _king_anim == null:
+		return
+	var name := _kanim_punch_r if _punch_right else _kanim_punch_l
+	_punch_right = not _punch_right
+	if name.is_empty():
+		return
+	var anim := _king_anim.get_animation(name)
+	if anim:
+		anim.loop_mode = Animation.LOOP_NONE
+	_king_anim.play(name)
+
+
+func _update_king_animation(_delta: float) -> void:
+	if _king_model == null or _king_anim == null:
+		return
+
+	# PUNCH: triggered externally; wait for swing to end, then resume movement
+	if _sword_swinging:
+		return
+
+	# AIR: no jump animation exists — let last ground animation continue
+	# State returns naturally when is_on_floor() becomes true again
+	if not is_on_floor():
+		return
+
+	# GROUND: pure state machine, no sticky flags
+	var speed := Vector2(velocity.x, velocity.z).length()
+	if speed > 5.0:
+		_king_play(_kanim_run)
+	elif speed > 0.2:
+		_king_play(_kanim_walk)
+	else:
+		_king_play(_kanim_idle)

@@ -47,6 +47,8 @@ var base_hp: int = BASE_MAX_HP
 var game_over: bool = false
 var game_mode: int = GAME_MODE_MISSION
 var has_giant_warrior: bool = false
+var infinite_resources: bool = false
+var unbreakable_base:   bool = false
 
 signal coins_changed(new_total: int)
 signal ore_changed(new_total: int)
@@ -96,7 +98,7 @@ func add_wood(amount: int) -> void:
 
 
 func damage_base(amount: int) -> void:
-	if amount <= 0 or base_hp <= 0 or game_over:
+	if unbreakable_base or amount <= 0 or base_hp <= 0 or game_over:
 		return
 	base_hp = maxi(0, base_hp - amount)
 	base_hp_changed.emit(base_hp, BASE_MAX_HP)
@@ -117,7 +119,9 @@ func reset_run() -> void:
 	commander_active = false
 	awaiting_build_type = BUILD_NONE
 	base_hp = BASE_MAX_HP
-	has_giant_warrior = false
+	has_giant_warrior  = false
+	infinite_resources = false
+	unbreakable_base   = false
 	coins_changed.emit(coins)
 	ore_changed.emit(ore)
 	wood_changed.emit(wood)
@@ -153,6 +157,7 @@ func try_market_trade(coin_delta: int, wood_delta: int, ore_delta: int) -> bool:
 
 
 func can_afford_build(build_type: int) -> bool:
+	if infinite_resources: return true
 	return ore >= get_build_ore_cost(build_type) and wood >= get_build_wood_cost(build_type)
 
 
@@ -179,12 +184,12 @@ func get_build_wood_cost(build_type: int) -> int:
 
 
 func spend_build_resources(build_type: int) -> bool:
-	if not can_afford_build(build_type):
-		return false
-	ore -= get_build_ore_cost(build_type)
-	wood -= get_build_wood_cost(build_type)
-	ore_changed.emit(ore)
-	wood_changed.emit(wood)
+	if not can_afford_build(build_type): return false
+	if not infinite_resources:
+		ore  -= get_build_ore_cost(build_type)
+		wood -= get_build_wood_cost(build_type)
+		ore_changed.emit(ore)
+		wood_changed.emit(wood)
 	return true
 
 
@@ -196,10 +201,10 @@ func refund_build_resources(build_type: int) -> void:
 
 
 func spend_coins(amount: int) -> bool:
-	if coins < amount:
-		return false
-	coins -= amount
-	coins_changed.emit(coins)
+	if not infinite_resources and coins < amount: return false
+	if not infinite_resources:
+		coins -= amount
+		coins_changed.emit(coins)
 	return true
 
 

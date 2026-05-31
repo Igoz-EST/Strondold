@@ -6,6 +6,7 @@ const _MineScene := preload("res://scenes/mine.tscn")
 const _WaveManagerScript := preload("res://scripts/wave_manager.gd")
 const _BaseWorldHpScript := preload("res://scripts/base_world_hp.gd")
 const _PauseEscListenerScript := preload("res://scripts/pause_menu_esc_listener.gd")
+const _WorldBuilderScript := preload("res://scripts/world_builder.gd")
 const _WarriorScene       := preload("res://scenes/warrior.tscn")
 const _GiantWarriorScript := preload("res://scripts/giant_warrior.gd")
 const _EnemyScene         := preload("res://scenes/enemy.tscn")
@@ -103,7 +104,9 @@ var _casino_clip:       Control
 var _casino_rolling     := false
 
 var _dev_console_layer: CanvasLayer
-var _dev_line: LineEdit
+var _dev_line:          LineEdit
+var _dev_inf_res_btn:   Button
+var _dev_unbreak_btn:   Button
 var _money_cmd_regex: RegEx
 
 var _wave_countdown_label: Label
@@ -1174,16 +1177,79 @@ func _setup_dev_console() -> void:
 
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	panel.offset_top = -132.0
+	panel.offset_top    = -260.0
 	panel.offset_bottom = -8.0
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.mouse_filter  = Control.MOUSE_FILTER_STOP
 	panel.add_theme_stylebox_override(&"panel", UiStyle.panel_style(UiStyle.PANEL_BG_SOFT, UiStyle.PANEL_BORDER_DIM, 8, 1))
 	_dev_console_layer.add_child(panel)
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", 5)
 	panel.add_child(col)
 
+	# ── DEVELOPER TOOLS ──────────────────────────────────────────────────────
+	var dev_hdr := Label.new()
+	dev_hdr.text = "DEVELOPER ▼"
+	UiStyle.style_label(dev_hdr, Color(0.88, 0.60, 0.20), 13, 3)
+	col.add_child(dev_hdr)
+
+	var row1 := HBoxContainer.new()
+	row1.add_theme_constant_override("separation", 5)
+	col.add_child(row1)
+
+	var btn_enemy := Button.new()
+	btn_enemy.text = "Spawn Enemy"; btn_enemy.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(btn_enemy, 13)
+	btn_enemy.pressed.connect(func() -> void: _dev_spawn_enemy(0))
+	row1.add_child(btn_enemy)
+
+	var btn_golem := Button.new()
+	btn_golem.text = "Spawn Golem"; btn_golem.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(btn_golem, 13)
+	btn_golem.pressed.connect(func() -> void: _dev_spawn_enemy(3))
+	row1.add_child(btn_golem)
+
+	var btn_giant := Button.new()
+	btn_giant.text = "Spawn Giant Warrior"; btn_giant.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(btn_giant, 13)
+	btn_giant.pressed.connect(_dev_spawn_giant_warrior)
+	row1.add_child(btn_giant)
+
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 5)
+	col.add_child(row2)
+
+	_dev_inf_res_btn = Button.new()
+	_dev_inf_res_btn.text = "Infinite Resources: OFF"
+	_dev_inf_res_btn.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(_dev_inf_res_btn, 13)
+	_dev_inf_res_btn.pressed.connect(_dev_toggle_infinite_resources)
+	row2.add_child(_dev_inf_res_btn)
+
+	_dev_unbreak_btn = Button.new()
+	_dev_unbreak_btn.text = "Unbreakable Base: OFF"
+	_dev_unbreak_btn.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(_dev_unbreak_btn, 13)
+	_dev_unbreak_btn.pressed.connect(_dev_toggle_unbreakable_base)
+	row2.add_child(_dev_unbreak_btn)
+
+	var row3 := HBoxContainer.new()
+	row3.add_theme_constant_override("separation", 5)
+	col.add_child(row3)
+
+	var btn_demon := Button.new()
+	btn_demon.text = "Spawn Demon"; btn_demon.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(btn_demon, 13)
+	btn_demon.pressed.connect(func() -> void: _dev_spawn_enemy(4))
+	row3.add_child(btn_demon)
+
+	var btn_boss := Button.new()
+	btn_boss.text = "Spawn Boss Minotaur"; btn_boss.focus_mode = Control.FOCUS_NONE
+	UiStyle.style_button(btn_boss, 13)
+	btn_boss.pressed.connect(func() -> void: _dev_spawn_enemy(2))
+	row3.add_child(btn_boss)
+
+	# ── CHAT / CONSOLE ───────────────────────────────────────────────────────
 	var hint := Label.new()
 	hint.text = "T - open. Money:number  |  wave_skip - next wave  |  Esc - close"
 	UiStyle.style_label(hint, UiStyle.TEXT_MUTED, 13, 2)
@@ -1253,6 +1319,47 @@ func _on_dev_console_submitted(text: String) -> void:
 		var n: int = int(m.get_string(1))
 		GameState.add_coins(n)
 	_dev_line.clear()
+
+
+# ─── DEVELOPER TOOLS ──────────────────────────────────────────────────────────
+
+func _dev_get_spawn_pos() -> Vector3:
+	var sp := get_tree().get_first_node_in_group(&"enemy_spawn") as Node3D
+	if sp != null:
+		return sp.global_position + Vector3(randf_range(-2.0, 2.0), 0.0, randf_range(-2.0, 2.0))
+	return Vector3(10.0, 0.55, 50.0)
+
+
+func _dev_spawn_enemy(kind: int) -> void:
+	var e := _EnemyScene.instantiate() as CharacterBody3D
+	e.call(&"configure", kind)
+	add_child(e)
+	e.global_position = _dev_get_spawn_pos()
+
+
+func _dev_spawn_giant_warrior() -> void:
+	var gw := _WarriorScene.instantiate() as CharacterBody3D
+	gw.set_script(_GiantWarriorScript)
+	add_child(gw)
+	gw.global_position = _dev_get_spawn_pos()
+	GameState.has_giant_warrior = true
+
+
+func _dev_toggle_infinite_resources() -> void:
+	GameState.infinite_resources = not GameState.infinite_resources
+	var on := GameState.infinite_resources
+	if _dev_inf_res_btn:
+		_dev_inf_res_btn.text = "Infinite Resources: %s" % ("ON" if on else "OFF")
+	# Refresh all cost buttons
+	_on_coins_changed(GameState.coins)
+	_refresh_upgrade_buttons()
+
+
+func _dev_toggle_unbreakable_base() -> void:
+	GameState.unbreakable_base = not GameState.unbreakable_base
+	var on := GameState.unbreakable_base
+	if _dev_unbreak_btn:
+		_dev_unbreak_btn.text = "Unbreakable Base: %s" % ("ON" if on else "OFF")
 
 
 # ─── CASINO ───────────────────────────────────────────────────────────────────

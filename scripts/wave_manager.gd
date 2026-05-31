@@ -6,8 +6,10 @@ const WAVE_TIMES_SEC := [180.0, 300.0, 600.0, 1200.0]
 const _EnemyScene := preload("res://scenes/enemy.tscn")
 
 const KIND_NORMAL := 0
-const KIND_BIG := 1
-const KIND_BOSS := 2
+const KIND_BIG    := 1
+const KIND_BOSS   := 2
+const KIND_GOLEM  := 3
+const KIND_DEMON  := 4
 
 const SPAWN_RADIUS := 132.0
 
@@ -105,13 +107,24 @@ func _spawn_group_scaled_boss(world: Node, normal_n: int, big_n: int, boss_multi
 	_spawn_one(world, KIND_BOSS, 0.35, boss_multiplier, boss_multiplier)
 
 
-func _spawn_one(world: Node, kind: int, angle_offset: float, stat_multiplier: float = 1.0, size_multiplier: float = 1.0) -> void:
+func _get_spawn_position() -> Vector3:
+	# Спавн только из одной точки — нода EnemySpawn в сцене
+	var spawn := get_tree().get_first_node_in_group(&"enemy_spawn") as Node3D
+	if spawn != null:
+		return spawn.global_position
+	# Fallback: старый радиус если нода не найдена
+	var ang := randf() * TAU
+	var r   := SPAWN_RADIUS * GameState.get_map_scale()
+	return Vector3(cos(ang) * r, 0.55, sin(ang) * r)
+
+
+func _spawn_one(world: Node, kind: int, _angle_offset: float, stat_multiplier: float = 1.0, size_multiplier: float = 1.0) -> void:
 	var e: CharacterBody3D = _EnemyScene.instantiate() as CharacterBody3D
 	e.configure(kind, stat_multiplier, size_multiplier)
 	world.add_child(e)
-	var ang := randf() * TAU + angle_offset
-	var r := SPAWN_RADIUS * GameState.get_map_scale()
-	e.global_position = Vector3(cos(ang) * r, 0.55, sin(ang) * r)
+	var base_pos := _get_spawn_position()
+	# Небольшой разброс чтобы враги не стакались в одну точку
+	e.global_position = base_pos + Vector3(randf_range(-2.0, 2.0), 0.0, randf_range(-2.0, 2.0))
 
 
 func all_waves_spawned() -> bool:

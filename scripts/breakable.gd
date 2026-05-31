@@ -1,3 +1,4 @@
+@tool
 extends StaticBody3D
 
 ## Physics layer 6 (value 32) — sword queries; player mask 1|32.
@@ -62,6 +63,8 @@ func _ready() -> void:
 		col.position = Vector3(0.0, 0.29, 0.0)
 		_add_rock_meshes()
 	add_child(col)
+	if Engine.is_editor_hint():
+		return  # skip HP bar + autoloads in editor
 	_setup_hp_bar()
 	set_process(false)
 
