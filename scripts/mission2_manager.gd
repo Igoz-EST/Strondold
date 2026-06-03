@@ -43,7 +43,7 @@ func _setup_groups() -> void:
 func _rough_place() -> void:
 	var root  := get_parent()
 	var rough := Vector3(_base_xz.x, 0.0, _base_xz.y)
-	for n_name in [&"Base", &"InteriorFloor", &"BaseCommandZone"]:
+	for n_name in ["Base", "InteriorFloor", "BaseCommandZone"]:
 		var n: Node3D = root.get_node_or_null(n_name) as Node3D
 		if n != null:
 			n.global_position = rough
@@ -57,16 +57,16 @@ func _snap_to_terrain() -> void:
 	var base_y := _terrain_y(Vector3(_base_xz.x, 0.0, _base_xz.y))
 	var final  := Vector3(_base_xz.x, base_y + _SURFACE_LIFT, _base_xz.y)
 
-	for n_name in [&"Base", &"InteriorFloor", &"BaseCommandZone"]:
+	for n_name in ["Base", "InteriorFloor", "BaseCommandZone"]:
 		var n: Node3D = root.get_node_or_null(n_name) as Node3D
 		if n != null:
 			n.global_position = final
 
 	var offsets := {
-		&"ExteriorSpawn": Vector3(  0.0, 0.0, -10.0),
-		&"WorkerSpawn":   Vector3(  6.0, 0.0,  -6.0),
-		&"OreDeposit":    Vector3( 18.0, 0.0, -10.0),
-		&"InteriorSpawn": Vector3(  0.0, 0.0,   2.0),
+		"ExteriorSpawn": Vector3(  0.0, 0.0, -10.0),
+		"WorkerSpawn":   Vector3(  6.0, 0.0,  -6.0),
+		"OreDeposit":    Vector3( 18.0, 0.0, -10.0),
+		"InteriorSpawn": Vector3(  0.0, 0.0,   2.0),
 	}
 	for n_name in offsets:
 		var off: Vector3 = offsets[n_name]
