@@ -1,15 +1,20 @@
 extends Control
 
-const MAIN_SCENE := "res://scenes/main.tscn"
+const MAIN_SCENE     := "res://scenes/main.tscn"
+const MISSION2_SCENE := "res://scenes/missions/mission2/main2.tscn"
 
-var _bar: ProgressBar
+var _bar:          ProgressBar
+var _target_scene: String = MAIN_SCENE
 
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS
+	process_mode  = Node.PROCESS_MODE_ALWAYS
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_target_scene = MISSION2_SCENE \
+		if GameState.game_mode == GameState.GAME_MODE_MISSION_2 \
+		else MAIN_SCENE
 	_build_ui()
-	ResourceLoader.load_threaded_request(MAIN_SCENE)
+	ResourceLoader.load_threaded_request(_target_scene)
 
 
 func _build_ui() -> void:
@@ -46,12 +51,12 @@ func _build_ui() -> void:
 
 func _process(_delta: float) -> void:
 	var progress: Array = []
-	var status := ResourceLoader.load_threaded_get_status(MAIN_SCENE, progress)
+	var status := ResourceLoader.load_threaded_get_status(_target_scene, progress)
 	var ratio := 0.0
 	if progress.size() > 0:
 		ratio = float(progress[0])
 	_bar.value = ratio * 100.0
 	if status == ResourceLoader.THREAD_LOAD_LOADED:
-		var packed := ResourceLoader.load_threaded_get(MAIN_SCENE) as PackedScene
+		var packed := ResourceLoader.load_threaded_get(_target_scene) as PackedScene
 		if packed != null:
 			get_tree().change_scene_to_packed(packed)

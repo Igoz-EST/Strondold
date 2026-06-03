@@ -47,8 +47,16 @@ var max_hp              := 40
 var hp:                 int  = 40
 var physical_resistance := 0.0
 var magic_resistance    := 0.0
-var is_flying           := false   # BAT_PIG: skip gravity, maintain fly height
+var is_flying           := false
 var _fly_attack_cd      := 0.0
+
+# Mission 2 path following
+var _follow_path:     Path3D = null
+var _path_progress:   float  = 0.0
+
+func assign_path(path: Path3D) -> void:
+	_follow_path    = path
+	_path_progress  = 0.0
 
 var _attack_cd    := 0.0
 var _hp_bar:       Node           = null
@@ -79,6 +87,11 @@ func _ready() -> void:
 	if kind == Kind.BOSS:
 		bar.position.y = 3.8
 	_load_model()
+	# In Mission 2 every enemy (including dev-console spawns) follows the designer path
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		var m2_path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
+		if m2_path != null:
+			assign_path(m2_path)
 
 
 func configure(kind_in: int, stat_multiplier: float = 1.0, size_multiplier: float = 1.0) -> void:
@@ -358,6 +371,10 @@ func _physics_process(delta: float) -> void:
 		_physics_process_flying(delta)
 		return
 
+	if _follow_path != null:
+		_physics_process_path(delta)
+		return
+
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 
@@ -422,11 +439,140 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 
+# ─── Mission 2: Path following physics ───────────────────────────────────────
+
+func _physics_process_path(delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+
+	if _ally_target != null and not is_instance_valid(_ally_target):
+		_release_ally_target()
+
+	# Existing duel/ally system still works on path-following enemies
+	var w_pick := _pick_ally_duel_candidate()
+	if w_pick == null:
+		_release_ally_target()
+	else:
+		if _ally_target != w_pick:
+			_release_ally_target()
+			if w_pick.has_method(&"offer_duel"):
+				w_pick.call(&"offer_duel", self)
+		_ally_target = w_pick
+
+	var vr2 := WARRIOR_VISION_RANGE * WARRIOR_VISION_RANGE
+	if _ally_target != null and is_instance_valid(_ally_target):
+		if global_position.distance_squared_to(_ally_target.global_position) > vr2 * 1.1:
+			_release_ally_target()
+
+	# Fight an ally if one is engaged (does NOT advance path progress)
+	if _ally_target != null and is_instance_valid(_ally_target):
+		var to_w := _ally_target.global_position - global_position
+		to_w.y = 0.0
+		var dist_w := to_w.length()
+		if dist_w > 0.25:
+			var dir_w := to_w.normalized()
+			velocity.x = dir_w.x * move_speed
+			velocity.z = dir_w.z * move_speed
+			look_at(global_position + dir_w, Vector3.UP)
+			_set_anim(AState.WALK)
+		else:
+			velocity.x = 0.0; velocity.z = 0.0
+			_set_anim(AState.ATTACK)
+		_attack_cd -= delta
+		if dist_w < ATTACK_RANGE and _attack_cd <= 0.0:
+			_attack_cd = ATTACK_INTERVAL
+			if _ally_target.has_method(&"apply_sword_hit"):
+				_ally_target.call(&"apply_sword_hit", damage_to_base, self)
+		_apply_separation()
+		move_and_slide()
+		return
+
+	# ── Advance along path ─────────────────────────────────────────────────
+	var curve   := _follow_path.curve
+	var total   := curve.get_baked_length()
+
+	if _path_progress >= total:
+		# Reached end of path — attack base
+		velocity.x = 0.0; velocity.z = 0.0
+		_set_anim(AState.ATTACK)
+		_attack_cd -= delta
+		if _attack_cd <= 0.0:
+			_attack_cd = ATTACK_INTERVAL
+			GameState.damage_base(damage_to_base)
+		_apply_separation()
+		move_and_slide()
+		return
+
+	# Advance progress by move_speed units/sec, then move toward that point
+	_path_progress = minf(_path_progress + move_speed * delta, total)
+	var local_pt  := curve.sample_baked(_path_progress, true)
+	var target    := _follow_path.to_global(local_pt)
+	var to        := target - global_position
+	to.y          = 0.0
+
+	if to.length() > 0.2:
+		var dir := to.normalized()
+		velocity.x = dir.x * move_speed
+		velocity.z = dir.z * move_speed
+		look_at(global_position + dir, Vector3.UP)
+		_set_anim(AState.WALK)
+	else:
+		velocity.x = 0.0; velocity.z = 0.0
+		_set_anim(AState.WALK)
+
+	_apply_separation()
+	move_and_slide()
+
+
+func _physics_process_path_flying(delta: float) -> void:
+	# Height maintenance (same as regular flying)
+	velocity.y = clampf((_BAT_PIG_FLY_HEIGHT - global_position.y) * 6.0, -10.0, 10.0)
+
+	var curve  := _follow_path.curve
+	var total  := curve.get_baked_length()
+
+	if _path_progress >= total:
+		velocity.x = 0.0; velocity.z = 0.0
+		_set_anim(AState.ATTACK)
+		_fly_attack_cd -= delta
+		if _fly_attack_cd <= 0.0:
+			_fly_attack_cd = _BAT_PIG_ATTACK_INTERVAL
+			GameState.damage_base(damage_to_base)
+		_apply_flying_separation()
+		move_and_slide()
+		return
+
+	_path_progress  = minf(_path_progress + move_speed * delta, total)
+	var local_pt   := curve.sample_baked(_path_progress, true)
+	var target     := _follow_path.to_global(local_pt)
+	target.y       = _BAT_PIG_FLY_HEIGHT   # stay at fly height, ignore path Y
+	var to         := target - global_position
+	to.y           = 0.0
+
+	if to.length() > 0.2:
+		var dir := to.normalized()
+		velocity.x = dir.x * move_speed
+		velocity.z = dir.z * move_speed
+		look_at(global_position + Vector3(dir.x, 0, dir.z), Vector3.UP)
+		_set_anim(AState.WALK)
+	else:
+		velocity.x = 0.0; velocity.z = 0.0
+
+	_apply_flying_separation()
+	move_and_slide()
+
+
 # ─── Flying physics (BAT_PIG) ─────────────────────────────────────────────────
 
 func _physics_process_flying(delta: float) -> void:
-	# Smooth height correction — always maintain fly height
 	velocity.y = clampf((_BAT_PIG_FLY_HEIGHT - global_position.y) * 6.0, -10.0, 10.0)
+
+	# Mission 2 path following takes priority (after GW interception)
+	if _follow_path != null:
+		var gw2 := _pick_giant_warrior()
+		if gw2 == null:
+			_physics_process_path_flying(delta)
+			return
 
 	# Giant Warrior interception — flying enemies must engage him first
 	var gw := _pick_giant_warrior()

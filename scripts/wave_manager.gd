@@ -124,8 +124,11 @@ func _spawn_one(world: Node, kind: int, _angle_offset: float, stat_multiplier: f
 	e.configure(kind, stat_multiplier, size_multiplier)
 	world.add_child(e)
 	var base_pos := _get_spawn_position()
-	# Небольшой разброс чтобы враги не стакались в одну точку
 	e.global_position = base_pos + Vector3(randf_range(-2.0, 2.0), 0.0, randf_range(-2.0, 2.0))
+	# Mission 2: assign EnemyPath so enemies follow the designer-placed path
+	var path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
+	if path != null and e.has_method(&"assign_path"):
+		e.call(&"assign_path", path)
 
 
 func all_waves_spawned() -> bool:

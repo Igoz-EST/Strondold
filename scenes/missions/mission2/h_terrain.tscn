@@ -1,0 +1,45 @@
+[gd_scene format=3 uid="uid://cno3m80v8dsjl"]
+
+[ext_resource type="Script" uid="uid://c88wfdjnsqa25" path="res://addons/zylann.hterrain/hterrain.gd" id="1_r114s"]
+[ext_resource type="Resource" uid="uid://ihc5b4vtbn5b" path="res://terrain_data/mission2/data.hterrain" id="2_vlrf6"]
+[ext_resource type="Script" uid="uid://qakk6103d48u" path="res://addons/zylann.hterrain/hterrain_texture_set.gd" id="3_usp04"]
+
+[sub_resource type="Resource" id="Resource_s3b5n"]
+script = ExtResource("3_usp04")
+mode = 0
+textures = [[], []]
+
+[sub_resource type="Curve3D" id="Curve3D_r114s"]
+_data = {
+"points": PackedVector3Array(0, 0, 0, 0, 0, 0, 254.88832, -0.040658683, 86.25716, 0, 0, 0, 0, 0, 0, 258.6968, 0.8853178, 121.71061, 0, 0, 0, 0, 0, 0, 271.65976, 1.0325851, 136.1925, 0, 0, 0, 0, 0, 0, 293.66367, 1.0258684, 140.41234, 0, 0, 0, 0, 0, 0, 321.91718, 0.8419359, 137.72119, 0, 0, 0, 0, 0, 0, 336.47888, 0.96119165, 155.33603, 0, 0, 0, 0, 0, 0, 335.39636, 0.43332958, 176.57086, 0, 0, 0, 0, 0, 0, 316.74927, 1.3755746, 190.07852, 0, 0, 0, 0, 0, 0, 281.74026, 2.137393, 193.78844, 0, 0, 0, 0, 0, 0, 239.83801, 1.2924128, 196.07066, 0, 0, 0, 0, 0, 0, 231.86989, 1.1226125, 218.60153, 0, 0, 0, 0, 0, 0, 250.76083, 4.8356075, 248.41685, 0, 0, 0, 0, 0, 0, 267.57553, 3.767459, 257.30334, 0, 0, 0, 0, 0, 0, 309.8212, 2.5909033, 261.85266, 0, 0, 0, 0, 0, 0, 351.53427, 0.77659035, 272.63892, 0, 0, 0, 0, 0, 0, 341.36044, 0.50648403, 294.18793, 0, 0, 0, 0, 0, 0, 315.45364, 1.2372055, 313.07843, 0, 0, 0, 0, 0, 0, 275.1073, 1.781682, 313.13992, 0, 0, 0, 0, 0, 0, 248.73409, 1.9292316, 316.27698, 0, 0, 0, 0, 0, 0, 247.61743, 2.4214993, 357.9338),
+"tilts": PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+}
+point_count = 20
+
+[node name="HTerrain" type="Node3D" unique_id=1615999190]
+script = ExtResource("1_r114s")
+_terrain_data = ExtResource("2_vlrf6")
+chunk_size = 64
+collision_enabled = true
+collision_layer = 1
+collision_mask = 1
+shader_type = "Classic4Lite"
+custom_shader = null
+custom_globalmap_shader = null
+texture_set = SubResource("Resource_s3b5n")
+render_layers = 1
+cast_shadow = 1
+shader_params/u_ground_uv_scale = 20
+shader_params/u_depth_blending = true
+shader_params/u_triplanar = null
+shader_params/u_tile_reduction = null
+metadata/_custom_type_script = "uid://c88wfdjnsqa25"
+
+[node name="BaseSpawn" type="Node3D" parent="." unique_id=1399714938]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 250.95471, 0, 369.2931)
+
+[node name="EnemySpawn" type="Node3D" parent="." unique_id=1011433694]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 255.31772, 0, 88.43449)
+
+[node name="Path3D" type="Path3D" parent="." unique_id=569874822]
+curve = SubResource("Curve3D_r114s")

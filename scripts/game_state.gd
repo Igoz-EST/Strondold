@@ -25,8 +25,9 @@ const ORE_PER_COIN := 100
 const WORKER_COST := 5
 const BUILDING_UPGRADE_COIN_COSTS: Array[int] = [0, 20, 30]
 const BUILDING_UPGRADE_ORE_COSTS: Array[int] = [0, 500, 1000]
-const GAME_MODE_MISSION := 0
-const GAME_MODE_ENDLESS := 1
+const GAME_MODE_MISSION   := 0
+const GAME_MODE_ENDLESS   := 1
+const GAME_MODE_MISSION_2 := 2
 
 const BASE_MAX_HP := 1000
 ## Горизонтальный радиус вокруг маркера группы `player_spawn_zone`, где нельзя ставить башни/бараки.

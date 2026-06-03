@@ -21,3 +21,7 @@ GameState="*res://scripts/game_state.gd"
 SoundManager="*res://scripts/sound_manager.gd"
 FeedbackFx="*res://scripts/feedback_fx.gd"
 UiStyle="*res://scripts/ui_style.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/zylann.hterrain/plugin.cfg")
