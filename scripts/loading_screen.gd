@@ -1,7 +1,7 @@
 extends Control
 
-const MAIN_SCENE     := "res://scenes/main.tscn"
-const MISSION2_SCENE := "res://scenes/missions/mission2/main2.tscn"
+const MAIN_SCENE     := "res://scenes/missions/mission1.tscn"
+const MISSION2_SCENE := "res://scenes/missions/mission2/mission2.tscn"
 
 var _bar:          ProgressBar
 var _target_scene: String = MAIN_SCENE

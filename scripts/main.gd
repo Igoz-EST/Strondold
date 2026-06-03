@@ -180,7 +180,8 @@ func _ready() -> void:
 	_refresh_ore_labels()
 	_on_base_hp_changed(GameState.base_hp, GameState.BASE_MAX_HP)
 	_setup_wave_timer_ui()
-	call_deferred(&"_spawn_secret_chest_random")
+	if GameState.game_mode != GameState.GAME_MODE_MISSION_2:
+		call_deferred(&"_spawn_secret_chest_random")
 	if GameState.has_giant_warrior:
 		call_deferred(&"_spawn_saved_giant_warrior")
 
@@ -267,6 +268,8 @@ func _setup_hud_style() -> void:
 
 
 func _randomize_map_resources() -> void:
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		return
 	_remove_scene_resource_placeholders()
 	var occupied: Array = []
 	_add_reserved_area(occupied, Vector3.ZERO, 20.0)
