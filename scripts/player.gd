@@ -55,6 +55,7 @@ var _flag_ring:    Node3D          = null   # radius circle for flag placement
 var _flag_cursor:  MeshInstance3D  = null   # cursor indicator (green/red)
 var _in_command_zone := false
 var _commander_focus := Vector3.ZERO
+var _commander_home  := Vector3.ZERO   # clamp origin — set to base XZ on enter
 var _commander_yaw := 0.0
 var _commander_zoom := 1.0
 var _commander_dragging := false
@@ -715,8 +716,8 @@ func _update_commander_camera(delta: float) -> void:
 
 func _clamp_commander_focus() -> void:
 	var limit := COMMANDER_FOCUS_CLAMP * GameState.get_map_scale()
-	_commander_focus.x = clampf(_commander_focus.x, -limit, limit)
-	_commander_focus.z = clampf(_commander_focus.z, -limit, limit)
+	_commander_focus.x = clampf(_commander_focus.x, _commander_home.x - limit, _commander_home.x + limit)
+	_commander_focus.z = clampf(_commander_focus.z, _commander_home.z - limit, _commander_home.z + limit)
 
 
 func _update_build_preview() -> void:
@@ -862,7 +863,8 @@ func _enter_commander_mode() -> void:
 	_reset_sword_pose()
 	global_position = _interior_spawn.global_position
 	velocity = Vector3.ZERO
-	_commander_focus = Vector3.ZERO
+	_commander_home  = Vector3(_interior_spawn.global_position.x, 0.0, _interior_spawn.global_position.z)
+	_commander_focus = _commander_home
 	_commander_yaw = deg_to_rad(-38.0)
 	_commander_zoom = 1.0
 	_commander_dragging = false

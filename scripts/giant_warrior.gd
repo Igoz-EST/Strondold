@@ -14,9 +14,10 @@ const _GW_ANIM_DEATH  := ["death", "death_poise_break"]
 
 # ─── Positions ────────────────────────────────────────────────────────────────
 ## Enemy spawn is at (10, 0.55, 132) — Giant Warrior holds 15u in front of it.
-const _ENEMY_SPAWN  := Vector3(10.0, 0.0, 132.0)
-const _HOLD_POS     := Vector3(10.0, 0.0, 117.0)   # 15u before spawn
-const _HOLD_RADIUS  := 2.0                           # "arrived" threshold
+const _HOLD_RADIUS  := 2.0
+
+# Dynamic — set in _ready() based on game mode
+var _hold_pos := Vector3(10.0, 0.0, 117.0)
 
 # ─── Stats ────────────────────────────────────────────────────────────────────
 const _MELEE_RANGE   := 4.0    # short melee range (not 15u like before)
@@ -36,6 +37,7 @@ var _gw_anim:  AnimationPlayer = null
 func _ready() -> void:
 	super._ready()
 	add_to_group(&"giant_warrior")
+	_init_hold_pos()
 	max_hp       = MAX_HP * 10
 	hp           = max_hp
 	melee_damage = MELEE_DAMAGE * 10
@@ -43,6 +45,20 @@ func _ready() -> void:
 	if is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
 		_hp_bar.call(&"set_hp", hp, max_hp)
 	_load_knight_model()
+
+
+func _init_hold_pos() -> void:
+	if GameState.game_mode != GameState.GAME_MODE_MISSION_2:
+		return
+	# In M2 the enemy path starts near Z=88 and ends near the base (~Z=358).
+	# Hold 50 units forward from the player (ExteriorSpawn direction).
+	var sp := get_tree().get_first_node_in_group(&"player_spawn_zone") as Node3D
+	if sp != null:
+		# Stand 40u toward enemy spawn (positive Z direction in M2)
+		_hold_pos = sp.global_position + Vector3(0.0, 0.0, 40.0)
+	else:
+		_hold_pos = global_position + Vector3(0.0, 0.0, 40.0)
+	print("GiantWarrior M2 hold_pos: ", _hold_pos)
 
 
 func _load_warrior_model() -> void:
@@ -144,7 +160,7 @@ func _do_march(delta: float) -> void:
 		return
 
 	# Move toward hold position
-	var to := _HOLD_POS - global_position
+	var to := _hold_pos - global_position
 	to.y = 0.0
 	if to.length() <= _HOLD_RADIUS:
 		_gw_state = GWState.HOLD

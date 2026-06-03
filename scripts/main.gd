@@ -1346,7 +1346,13 @@ func _dev_spawn_giant_warrior() -> void:
 	var gw := _WarriorScene.instantiate() as CharacterBody3D
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
-	gw.global_position = Vector3(7.0, 0.55, 22.0)  # road near base, outside base collisions
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		var sp := get_node_or_null("ExteriorSpawn") as Node3D
+		gw.global_position = sp.global_position + Vector3(4.0, 0.55, 0.0) if sp != null \
+			else Vector3(254.0, 0.55, 351.0)
+		print("GiantWarrior M2 spawn: ", gw.global_position)
+	else:
+		gw.global_position = Vector3(7.0, 0.55, 22.0)
 	GameState.has_giant_warrior = true
 
 

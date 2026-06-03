@@ -92,6 +92,10 @@ func _ready() -> void:
 		var m2_path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
 		if m2_path != null:
 			assign_path(m2_path)
+			if is_flying:
+				print("BAT PIG M2: path assigned, length=%.1f" % m2_path.curve.get_baked_length())
+		else:
+			push_warning("Enemy M2: m2_enemy_path group empty — path not assigned (kind=%d)" % kind)
 
 
 func configure(kind_in: int, stat_multiplier: float = 1.0, size_multiplier: float = 1.0) -> void:

@@ -47,9 +47,16 @@ func _rough_place() -> void:
 		var n: Node3D = root.get_node_or_null(n_name) as Node3D
 		if n != null:
 			n.global_position = rough
+	# InteriorSpawn must be placed here (synchronous) so player._start_game_in_commander
+	# deferred call teleports the player to the correct M2 position, not the scene default.
+	var interior: Node3D = root.get_node_or_null("InteriorSpawn") as Node3D
+	if interior != null:
+		interior.global_position = rough + Vector3(0.0, 0.55, -18.0)
+	# ExteriorSpawn: Base BoxShape extends ~11 units in Z from center.
+	# Keep player at least 15 units clear of the front face (> 11 + margin).
 	var ext: Node3D = root.get_node_or_null("ExteriorSpawn") as Node3D
 	if ext != null:
-		ext.global_position = rough + Vector3(0.0, 0.55, -10.0)
+		ext.global_position = rough + Vector3(0.0, 0.55, -18.0)
 
 
 func _snap_to_terrain() -> void:
@@ -63,10 +70,10 @@ func _snap_to_terrain() -> void:
 			n.global_position = final
 
 	var offsets := {
-		"ExteriorSpawn": Vector3(  0.0, 0.0, -10.0),
-		"WorkerSpawn":   Vector3(  6.0, 0.0,  -6.0),
-		"OreDeposit":    Vector3( 18.0, 0.0, -10.0),
-		"InteriorSpawn": Vector3(  0.0, 0.0,   2.0),
+		"ExteriorSpawn": Vector3(  0.0, 0.0, -18.0),
+		"InteriorSpawn": Vector3(  0.0, 0.0, -18.0),
+		"WorkerSpawn":   Vector3(  6.0, 0.0, -14.0),
+		"OreDeposit":    Vector3( 18.0, 0.0, -14.0),
 	}
 	for n_name in offsets:
 		var off: Vector3 = offsets[n_name]
