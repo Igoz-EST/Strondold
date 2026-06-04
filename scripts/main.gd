@@ -1349,8 +1349,24 @@ func _on_dev_console_submitted(text: String) -> void:
 func _dev_get_spawn_pos() -> Vector3:
 	var sp := get_tree().get_first_node_in_group(&"enemy_spawn") as Node3D
 	if sp != null:
-		return sp.global_position + Vector3(randf_range(-2.0, 2.0), 0.0, randf_range(-2.0, 2.0))
+		var xoff := randf_range(-2.0, 2.0)
+		var zoff := randf_range(-2.0, 2.0)
+		var x    := sp.global_position.x + xoff
+		var z    := sp.global_position.z + zoff
+		var y    := sp.global_position.y
+		if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+			y = _m2_terrain_y(x, z) + 0.55
+		return Vector3(x, y, z)
 	return Vector3(10.0, 0.55, 50.0)
+
+
+func _m2_terrain_y(x: float, z: float) -> float:
+	var space := get_world_3d().direct_space_state
+	var q     := PhysicsRayQueryParameters3D.create(
+		Vector3(x, 300.0, z), Vector3(x, -50.0, z), 1)
+	q.collide_with_areas = false
+	var hit := space.intersect_ray(q)
+	return hit.position.y if hit else 0.0
 
 
 func _dev_spawn_enemy(kind: int) -> void:

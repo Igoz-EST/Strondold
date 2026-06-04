@@ -124,11 +124,32 @@ func _spawn_one(world: Node, kind: int, _angle_offset: float, stat_multiplier: f
 	e.configure(kind, stat_multiplier, size_multiplier)
 	world.add_child(e)
 	var base_pos := _get_spawn_position()
-	e.global_position = base_pos + Vector3(randf_range(-2.0, 2.0), 0.0, randf_range(-2.0, 2.0))
+	var xoff     := randf_range(-2.0, 2.0)
+	var zoff     := randf_range(-2.0, 2.0)
+	var spawn_y  := base_pos.y
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		# In M2 the terrain is uneven; sample the surface height at the exact
+		# spawn XZ so enemies never appear inside or below the terrain.
+		spawn_y = _terrain_y_at(base_pos.x + xoff, base_pos.z + zoff) + 0.55
+	e.global_position = Vector3(base_pos.x + xoff, spawn_y, base_pos.z + zoff)
 	# Mission 2: assign EnemyPath so enemies follow the designer-placed path
 	var path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
 	if path != null and e.has_method(&"assign_path"):
 		e.call(&"assign_path", path)
+
+
+## Downward raycast returning terrain Y at a given XZ (Mission 2 only).
+## Uses get_parent() as Node3D for World3D access since WaveManager is a Node.
+func _terrain_y_at(x: float, z: float) -> float:
+	var parent := get_parent() as Node3D
+	if parent == null:
+		return 0.0
+	var space := parent.get_world_3d().direct_space_state
+	var q     := PhysicsRayQueryParameters3D.create(
+		Vector3(x, 300.0, z), Vector3(x, -50.0, z), 1)
+	q.collide_with_areas = false
+	var hit := space.intersect_ray(q)
+	return hit.position.y if hit else 0.0
 
 
 func all_waves_spawned() -> bool:
