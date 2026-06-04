@@ -1,20 +1,36 @@
 ## Mission 2 Manager — runs only in GAME_MODE_MISSION_2.
 ## Registers designer nodes into groups and repositions gameplay nodes
-## to match the designer-placed terrain markers.
+## so the fortress sits on the HTerrain exactly as it does on the flat
+## ground in Mission 1.
+##
+## Mission 1 reference layout (terrain Y = 0):
+##   Base origin       Y = 3.0   (podium bottom lands at Y=0)
+##   InteriorFloor     Y = 1.5
+##   BaseCommandZone   Y = 0.0   (sphere trigger at ground level)
+##   InteriorSpawn    (0, 2.1, 0) — inside the keep
+##   ExteriorSpawn   (14, 0.5, 0) — in front of the gate (gate faces world +X)
+##
+## For Mission 2 every offset is applied on top of the actual terrain Y
+## at the relevant XZ position.
 extends Node3D
 
-const _SURFACE_LIFT := 0.15
+# Vertical offsets that mirror Mission 1's base layout.
+const _BASE_ABOVE_TERRAIN    := 3.0   # base origin above terrain
+const _FLOOR_ABOVE_TERRAIN   := 1.5   # interior floor above terrain
+const _SPAWN_ABOVE_TERRAIN   := 0.5   # ExteriorSpawn / marker height above terrain
 
-var _base_xz := Vector2(250.95, 369.29)
+var _base_xz := Vector2(250.95, 369.29)   # fallback; overwritten from BaseSpawn
 
 
 func _ready() -> void:
 	if GameState.game_mode != GameState.GAME_MODE_MISSION_2:
 		return
 	_setup_groups()
-	_rough_place()
+	_rough_place()          # synchronous — fixes InteriorSpawn before deferred player teleport
 	call_deferred(&"_snap_to_terrain")
 
+
+# ── 1. Groups ─────────────────────────────────────────────────────────────────
 
 func _setup_groups() -> void:
 	var terrain: Node3D = get_parent().get_node_or_null("Terrain") as Node3D
@@ -38,54 +54,75 @@ func _setup_groups() -> void:
 		enemy_path.add_to_group(&"m2_enemy_path")
 	if base_spawn != null:
 		_base_xz = Vector2(base_spawn.global_position.x, base_spawn.global_position.z)
+	# HTerrain must be in "terrain" group so _commander_ground_hit accepts it
+	if terrain != null:
+		terrain.add_to_group(&"terrain")
 
+
+# ── 2. Rough placement (synchronous) ─────────────────────────────────────────
+# Uses approximate Y values matching Mission 1 offsets (terrain Y ≈ 0 here).
+# _snap_to_terrain will correct to exact surface height.
 
 func _rough_place() -> void:
-	var root  := get_parent()
-	var rough := Vector3(_base_xz.x, 0.0, _base_xz.y)
-	for n_name in ["Base", "InteriorFloor", "BaseCommandZone"]:
-		var n: Node3D = root.get_node_or_null(n_name) as Node3D
-		if n != null:
-			n.global_position = rough
-	# InteriorSpawn must be placed here (synchronous) so player._start_game_in_commander
-	# deferred call teleports the player to the correct M2 position, not the scene default.
-	var interior: Node3D = root.get_node_or_null("InteriorSpawn") as Node3D
-	if interior != null:
-		interior.global_position = rough + Vector3(0.0, 0.55, -18.0)
-	# ExteriorSpawn: Base BoxShape extends ~11 units in Z from center.
-	# Keep player at least 15 units clear of the front face (> 11 + margin).
-	var ext: Node3D = root.get_node_or_null("ExteriorSpawn") as Node3D
-	if ext != null:
-		ext.global_position = rough + Vector3(0.0, 0.55, -18.0)
+	var root := get_parent()
+	var bx := _base_xz.x
+	var bz := _base_xz.y
 
+	_set_pos(root, "Base",             Vector3(bx, _BASE_ABOVE_TERRAIN,  bz))
+	_set_pos(root, "InteriorFloor",    Vector3(bx, _FLOOR_ABOVE_TERRAIN, bz))
+	_set_pos(root, "BaseCommandZone",  Vector3(bx, 0.0,                  bz))
+	# InteriorSpawn: placed synchronously so _start_game_in_commander (deferred)
+	# teleports the player into the keep rather than the scene-default (0,2.1,0).
+	_set_pos(root, "InteriorSpawn",    Vector3(bx, 2.1, bz))
+	# ExteriorSpawn: gate faces world +X (same rotation as M1)
+	_set_pos(root, "ExteriorSpawn",    Vector3(bx + 14.0, _SPAWN_ABOVE_TERRAIN, bz))
+
+
+# ── 3. Terrain snap (deferred — PhysicsDirectSpaceState ready) ───────────────
 
 func _snap_to_terrain() -> void:
-	var root   := get_parent()
-	var base_y := _terrain_y(Vector3(_base_xz.x, 0.0, _base_xz.y))
-	var final  := Vector3(_base_xz.x, base_y + _SURFACE_LIFT, _base_xz.y)
+	var root := get_parent()
+	var bx   := _base_xz.x
+	var bz   := _base_xz.y
 
-	for n_name in ["Base", "InteriorFloor", "BaseCommandZone"]:
-		var n: Node3D = root.get_node_or_null(n_name) as Node3D
-		if n != null:
-			n.global_position = final
+	var ty_base := _terrain_y(Vector3(bx, 0.0, bz))
 
-	var offsets := {
-		"ExteriorSpawn": Vector3(  0.0, 0.0, -18.0),
-		"InteriorSpawn": Vector3(  0.0, 0.0, -18.0),
-		"WorkerSpawn":   Vector3(  6.0, 0.0, -14.0),
-		"OreDeposit":    Vector3( 18.0, 0.0, -14.0),
+	# Base: origin sits _BASE_ABOVE_TERRAIN units above the terrain surface.
+	# This exactly replicates M1's Y=3 when terrain Y=0.
+	_set_pos(root, "Base",            Vector3(bx, ty_base + _BASE_ABOVE_TERRAIN,  bz))
+	_set_pos(root, "InteriorFloor",   Vector3(bx, ty_base + _FLOOR_ABOVE_TERRAIN, bz))
+	# CommandZone at terrain level so the trigger sphere sits around the base entrance
+	_set_pos(root, "BaseCommandZone", Vector3(bx, ty_base,                         bz))
+	# InteriorSpawn inside the keep (M1: 2.1 above terrain)
+	_set_pos(root, "InteriorSpawn",   Vector3(bx, ty_base + 2.1,                  bz))
+
+	# ExteriorSpawn: in front of the gate — gate faces world +X (after 90° Y rotation)
+	var ext_xz := Vector3(bx + 14.0, 0.0, bz)
+	_set_pos(root, "ExteriorSpawn",
+		Vector3(ext_xz.x, _terrain_y(ext_xz) + _SPAWN_ABOVE_TERRAIN, ext_xz.z))
+
+	# Service spawns
+	var svc := {
+		"WorkerSpawn": Vector3(bx + 6.0,  0.0, bz - 6.0),
+		"OreDeposit":  Vector3(bx + 18.0, 0.0, bz - 10.0),
 	}
-	for n_name in offsets:
-		var off: Vector3 = offsets[n_name]
-		var xz := Vector3(_base_xz.x + off.x, 0.0, _base_xz.y + off.z)
-		var gy := _terrain_y(xz)
-		var m: Node3D = root.get_node_or_null(n_name) as Node3D
-		if m != null:
-			m.global_position = Vector3(xz.x, gy + 0.55, xz.z)
+	for n_name in svc:
+		var xz: Vector3 = svc[n_name]
+		_set_pos(root, n_name, Vector3(xz.x, _terrain_y(xz) + _SPAWN_ABOVE_TERRAIN, xz.z))
 
-	print("Mission2Manager: base Y=%.2f (terrain=%.2f)" % [final.y, base_y])
+	print("Mission2Manager snap: base_origin_y=%.2f  terrain_y=%.2f" \
+		% [ty_base + _BASE_ABOVE_TERRAIN, ty_base])
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+func _set_pos(root: Node, n_name: String, pos: Vector3) -> void:
+	var n: Node3D = root.get_node_or_null(n_name) as Node3D
+	if n != null:
+		n.global_position = pos
+
+
+## Downward raycast on collision_mask = 1 (HTerrain layer).
 func _terrain_y(at_xz: Vector3) -> float:
 	var space := get_world_3d().direct_space_state
 	var query  := PhysicsRayQueryParameters3D.create(
