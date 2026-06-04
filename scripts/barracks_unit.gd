@@ -118,10 +118,24 @@ func _spawn_warrior_slot(slot: int) -> void:
 	if w.has_method(&"setup"):
 		w.call(&"setup", self, slot, _rally_offset(slot))
 	world.add_child(w)
-	w.global_position = global_position + _rally_offset(slot) + Vector3(0.0, 0.55, 0.0)
+	var spawn_xz := global_position + _rally_offset(slot)
+	var spawn_y  := spawn_xz.y + 0.55
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		spawn_y = _terrain_y_at(spawn_xz) + 0.55
+	w.global_position = Vector3(spawn_xz.x, spawn_y, spawn_xz.z)
 	if w.has_method(&"apply_upgrade_level"):
 		w.call(&"apply_upgrade_level", upgrade_level)
 	_slot_warrior[slot] = w
+
+
+func _terrain_y_at(at: Vector3) -> float:
+	var space := get_world_3d().direct_space_state
+	var q     := PhysicsRayQueryParameters3D.create(
+		Vector3(at.x, 300.0, at.z), Vector3(at.x, -50.0, at.z), 1)
+	q.collide_with_areas = false
+	q.exclude = [get_rid()]   # don't hit the barracks building itself
+	var hit := space.intersect_ray(q)
+	return hit.position.y if hit else at.y
 
 
 func notify_warrior_lost(slot: int) -> void:
