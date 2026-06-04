@@ -31,6 +31,11 @@ var _gw_state: GWState = GWState.MARCH
 var _gw_model: Node3D         = null
 var _gw_anim:  AnimationPlayer = null
 
+# Mission 2 path-following (reverse march along enemy path)
+var _gw_path:           Path3D = null   # m2_enemy_path
+var _gw_path_progress:  float  = 0.0   # decreases from total → _gw_hold_progress
+var _gw_hold_progress:  float  = 30.0  # hold 30 u from EnemySpawn end of path
+
 
 # ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -50,15 +55,18 @@ func _ready() -> void:
 func _init_hold_pos() -> void:
 	if GameState.game_mode != GameState.GAME_MODE_MISSION_2:
 		return
-	# In M2 the enemy path starts near Z=88 and ends near the base (~Z=358).
-	# Hold 50 units forward from the player (ExteriorSpawn direction).
-	var sp := get_tree().get_first_node_in_group(&"player_spawn_zone") as Node3D
-	if sp != null:
-		# Stand 40u toward enemy spawn (positive Z direction in M2)
-		_hold_pos = sp.global_position + Vector3(0.0, 0.0, 40.0)
-	else:
-		_hold_pos = global_position + Vector3(0.0, 0.0, 40.0)
-	print("GiantWarrior M2 hold_pos: ", _hold_pos)
+	var path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
+	if path == null:
+		push_warning("GiantWarrior M2: m2_enemy_path not found")
+		return
+	_gw_path          = path
+	var curve          := path.curve
+	_gw_path_progress  = curve.get_baked_length()   # start at Base end of path
+	_gw_hold_progress  = 30.0                        # hold 30 u from EnemySpawn end
+	# Compute world hold position for _do_combat fallback
+	var hold_local     := curve.sample_baked(_gw_hold_progress, true)
+	_hold_pos          = path.to_global(hold_local)
+	print("GiantWarrior M2: path_total=%.1f  hold_pos=%s" % [_gw_path_progress, _hold_pos])
 
 
 func _load_warrior_model() -> void:
@@ -154,12 +162,40 @@ func _physics_process(delta: float) -> void:
 
 
 func _do_march(delta: float) -> void:
-	# Transition: enemy nearby → fight
 	if _pick_enemy() != null:
 		_gw_state = GWState.COMBAT
 		return
+	if _gw_path != null:
+		_do_march_path(delta)
+	else:
+		_do_march_direct()
 
-	# Move toward hold position
+
+func _do_march_path(delta: float) -> void:
+	# Reverse path walk: progress decreases from total (Base end) → hold progress (EnemySpawn end)
+	if _gw_path_progress <= _gw_hold_progress + _HOLD_RADIUS:
+		_gw_state = GWState.HOLD
+		velocity.x = 0.0; velocity.z = 0.0
+		_gw_play(_GW_ANIM_IDLE)
+		return
+	_gw_path_progress = maxf(_gw_hold_progress,
+		_gw_path_progress - MOVE_SPEED * delta)
+	var local_pt := _gw_path.curve.sample_baked(_gw_path_progress, true)
+	var target   := _gw_path.to_global(local_pt)
+	var to       := target - global_position
+	to.y         = 0.0
+	if to.length() > 0.3:
+		var dir := to.normalized()
+		velocity.x = dir.x * MOVE_SPEED
+		velocity.z = dir.z * MOVE_SPEED
+		look_at(global_position + Vector3(dir.x, 0.0, dir.z), Vector3.UP)
+		_gw_play(_GW_ANIM_WALK)
+	else:
+		velocity.x = 0.0; velocity.z = 0.0
+
+
+func _do_march_direct() -> void:
+	# M1: straight march toward _hold_pos
 	var to := _hold_pos - global_position
 	to.y = 0.0
 	if to.length() <= _HOLD_RADIUS:
@@ -167,7 +203,6 @@ func _do_march(delta: float) -> void:
 		velocity.x = 0.0; velocity.z = 0.0
 		_gw_play(_GW_ANIM_IDLE)
 		return
-
 	var dir := to.normalized()
 	velocity.x = dir.x * MOVE_SPEED
 	velocity.z = dir.z * MOVE_SPEED
@@ -187,7 +222,7 @@ func _do_combat(delta: float) -> void:
 	var tgt := _pick_enemy()
 	if tgt == null:
 		# Return to hold or resume march
-		var to_hold := _HOLD_POS - global_position
+		var to_hold := _hold_pos - global_position
 		to_hold.y = 0.0
 		_gw_state = GWState.HOLD if to_hold.length() <= _HOLD_RADIUS * 3.0 else GWState.MARCH
 		return

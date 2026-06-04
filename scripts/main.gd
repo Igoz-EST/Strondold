@@ -190,7 +190,25 @@ func _spawn_saved_giant_warrior() -> void:
 	var gw := _WarriorScene.instantiate() as CharacterBody3D
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
-	gw.global_position = Vector3(7.0, 0.55, 22.0)  # road near base, outside base collisions
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		_gw_place_m2(gw)
+	else:
+		gw.global_position = Vector3(7.0, 0.55, 22.0)
+
+
+## Spawns a Giant Warrior at the Base end of Mission 2's Path3D.
+## GW will then reverse-march along the path toward EnemySpawn.
+func _gw_place_m2(gw: CharacterBody3D) -> void:
+	var path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
+	if path != null:
+		var curve      := path.curve
+		var end_local  := curve.sample_baked(curve.get_baked_length(), true)
+		var spawn_pos  := path.to_global(end_local) + Vector3(0.0, 1.0, 0.0)
+		gw.global_position = spawn_pos
+		print("GiantWarrior M2 spawn: ", spawn_pos)
+	else:
+		push_warning("GiantWarrior M2: m2_enemy_path empty — using fallback")
+		gw.global_position = Vector3(248.0, 4.0, 358.0)
 
 
 func _apply_map_scale() -> void:
@@ -1347,10 +1365,7 @@ func _dev_spawn_giant_warrior() -> void:
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
 	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
-		var sp := get_node_or_null("ExteriorSpawn") as Node3D
-		gw.global_position = sp.global_position + Vector3(4.0, 0.55, 0.0) if sp != null \
-			else Vector3(254.0, 0.55, 351.0)
-		print("GiantWarrior M2 spawn: ", gw.global_position)
+		_gw_place_m2(gw)
 	else:
 		gw.global_position = Vector3(7.0, 0.55, 22.0)
 	GameState.has_giant_warrior = true
@@ -1637,7 +1652,10 @@ func _casino_try_spawn_giant() -> void:
 	var gw := _WarriorScene.instantiate() as CharacterBody3D
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
-	gw.global_position = Vector3(7.0, 0.55, 22.0)  # road near base, outside base collisions
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		_gw_place_m2(gw)
+	else:
+		gw.global_position = Vector3(7.0, 0.55, 22.0)
 	GameState.has_giant_warrior = true
 
 
