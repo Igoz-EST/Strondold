@@ -28,13 +28,25 @@ var _flag_pos:    Vector3          = Vector3.ZERO
 var _flag_marker: Node3D           = null
 var _flag_line:   MeshInstance3D   = null
 
+# True while _ready() is executing so apply_upgrade_level skips the warrior
+# spawn (global_position is still (0,0,0) — barracks.global_position = p is
+# set by try_place_tower only AFTER add_child / _ready() returns).
+var _ready_init := false
+
 
 func _ready() -> void:
 	add_to_group(&"barracks")
+	_ready_init = true
 	apply_upgrade_level(int(get_meta(&"barracks_level", 1)))
+	_ready_init = false
+	# Spawn warriors deferred: by the time this fires, global_position = p.
+	call_deferred(&"_initial_warrior_spawn")
+	GameState.commander_mode_changed.connect(_on_commander_mode_changed)
+
+
+func _initial_warrior_spawn() -> void:
 	for slot: int in range(max_warriors):
 		_spawn_warrior_slot(slot)
-	GameState.commander_mode_changed.connect(_on_commander_mode_changed)
 
 
 func _exit_tree() -> void:
@@ -64,7 +76,7 @@ func apply_upgrade_level(level: int) -> void:
 	for w in _slot_warrior:
 		if w != null and is_instance_valid(w) and w.has_method(&"apply_upgrade_level"):
 			w.call(&"apply_upgrade_level", upgrade_level)
-	if is_inside_tree():
+	if is_inside_tree() and not _ready_init:
 		for slot: int in range(max_warriors):
 			_spawn_warrior_slot(slot)
 
