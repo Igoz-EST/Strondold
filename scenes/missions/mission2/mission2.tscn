@@ -9,13 +9,13 @@
 [sub_resource type="BoxShape3D" id="BoxShape_player"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_base"]
-size = Vector3(22.0, 6.0, 21.0)
+size = Vector3(10, 6, 10)
 
 [sub_resource type="SphereShape3D" id="SphereShape_cmdzone"]
-radius = 20.0
+radius = 13.0
 
 [sub_resource type="BoxShape3D" id="BoxShape_floor"]
-size = Vector3(30.0, 0.2, 30.0)
+size = Vector3(8, 0.2, 8)
 
 [node name="Main" instance=ExtResource("1_gameroot")]
 

@@ -85,21 +85,49 @@ func _snap_to_terrain() -> void:
 	var bx   := _base_xz.x
 	var bz   := _base_xz.y
 
-	var ty_base := _terrain_y(Vector3(bx, 0.0, bz))
+	# Build exclude list so the raycast hits HTerrain, not the Base/InteriorFloor
+	# that was rough-placed during _ready().  Physics body transforms are sometimes
+	# synced before the deferred call runs, causing the ray to hit the box top
+	# instead of the terrain surface.
+	var excludes: Array = []
+	for n_name in ["Base", "InteriorFloor"]:
+		var n := root.get_node_or_null(n_name)
+		if n is CollisionObject3D:
+			excludes.append((n as CollisionObject3D).get_rid())
 
-	# Base: origin sits _BASE_ABOVE_TERRAIN units above the terrain surface.
-	# This exactly replicates M1's Y=3 when terrain Y=0.
+	# Base footprint after 90-deg Y rotation:
+	#   local ±Z (11 u) → world ±X   →  (bx ± 11,  bz)
+	#   local ±X (10.5u) → world ∓Z  →  (bx, bz ∓ 10.5)
+	# Sample the terrain at center + 4 edge midpoints, take the MAXIMUM so the
+	# foundation never floats above a high-terrain edge.
+	var sample_pts: Array[Vector3] = [
+		Vector3(bx,        0.0, bz),          # centre
+		Vector3(bx + 11.0, 0.0, bz),          # gate side  (+world X)
+		Vector3(bx - 11.0, 0.0, bz),          # rear side  (-world X)
+		Vector3(bx,        0.0, bz - 10.5),   # path side  (-world Z, toward enemies)
+		Vector3(bx,        0.0, bz + 10.5),   # far side   (+world Z)
+	]
+	var ty_base := -INF
+	for pt in sample_pts:
+		var h := _terrain_y_ex(pt, excludes)
+		if h > ty_base:
+			ty_base = h
+
+	print("Mission2Manager snap: footprint max terrain=%.3f  base_origin_y=%.3f" \
+		% [ty_base, ty_base + _BASE_ABOVE_TERRAIN])
+
+	# Base origin 3.0 u above highest footprint terrain → podium bottom lands on terrain.
 	_set_pos(root, "Base",            Vector3(bx, ty_base + _BASE_ABOVE_TERRAIN,  bz))
 	_set_pos(root, "InteriorFloor",   Vector3(bx, ty_base + _FLOOR_ABOVE_TERRAIN, bz))
-	# CommandZone at terrain level so the trigger sphere sits around the base entrance
-	_set_pos(root, "BaseCommandZone", Vector3(bx, ty_base,                         bz))
-	# InteriorSpawn inside the keep (M1: 2.1 above terrain)
+	# CommandZone at terrain level (M1 places it at ground level, not at base origin)
+	_set_pos(root, "BaseCommandZone", Vector3(bx, ty_base,                        bz))
+	# InteriorSpawn inside the keep (M1 offset: 2.1 above ground)
 	_set_pos(root, "InteriorSpawn",   Vector3(bx, ty_base + 2.1,                  bz))
 
-	# ExteriorSpawn: in front of the gate — gate faces world +X (after 90° Y rotation)
+	# ExteriorSpawn: in front of the gate (gate faces world +X after 90° Y rotation)
 	var ext_xz := Vector3(bx + 14.0, 0.0, bz)
 	_set_pos(root, "ExteriorSpawn",
-		Vector3(ext_xz.x, _terrain_y(ext_xz) + _SPAWN_ABOVE_TERRAIN, ext_xz.z))
+		Vector3(ext_xz.x, _terrain_y_ex(ext_xz, excludes) + _SPAWN_ABOVE_TERRAIN, ext_xz.z))
 
 	# Service spawns
 	var svc := {
@@ -108,10 +136,8 @@ func _snap_to_terrain() -> void:
 	}
 	for n_name in svc:
 		var xz: Vector3 = svc[n_name]
-		_set_pos(root, n_name, Vector3(xz.x, _terrain_y(xz) + _SPAWN_ABOVE_TERRAIN, xz.z))
-
-	print("Mission2Manager snap: base_origin_y=%.2f  terrain_y=%.2f" \
-		% [ty_base + _BASE_ABOVE_TERRAIN, ty_base])
+		_set_pos(root, n_name,
+			Vector3(xz.x, _terrain_y_ex(xz, excludes) + _SPAWN_ABOVE_TERRAIN, xz.z))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -123,7 +149,9 @@ func _set_pos(root: Node, n_name: String, pos: Vector3) -> void:
 
 
 ## Downward raycast on collision_mask = 1 (HTerrain layer).
-func _terrain_y(at_xz: Vector3) -> float:
+## Optionally excludes specific CollisionObject3D RIDs (e.g. Base, InteriorFloor)
+## so their rough-placed boxes do not shadow the terrain surface.
+func _terrain_y_ex(at_xz: Vector3, excludes: Array = []) -> float:
 	var space := get_world_3d().direct_space_state
 	var query  := PhysicsRayQueryParameters3D.create(
 		Vector3(at_xz.x, 500.0, at_xz.z),
@@ -131,8 +159,15 @@ func _terrain_y(at_xz: Vector3) -> float:
 		1
 	)
 	query.collide_with_areas = false
+	if not excludes.is_empty():
+		query.exclude = excludes
 	var hit := space.intersect_ray(query)
 	return hit.position.y if hit else 0.0
+
+
+## Convenience wrapper — no exclusions.
+func _terrain_y(at_xz: Vector3) -> float:
+	return _terrain_y_ex(at_xz)
 
 
 func _find_path(parent: Node) -> Path3D:
