@@ -82,7 +82,9 @@ var _tower_button:    Button
 var _skywatch_button: Button
 var _barracks_button: Button
 var _warehouse_button: Button
+var _market_building_button: Button
 var _dmg_upgrade_button: Button
+var _market_tab_idx: int = -1
 var _bld_panel_layer:      CanvasLayer
 var _bld_panel_container:  PanelContainer
 var _bld_selected:         Node3D = null
@@ -499,16 +501,6 @@ func _setup_commander_build_ui() -> void:
 	_barracks_button.pressed.connect(_on_barracks_button_pressed)
 	row_build.add_child(_barracks_button)
 
-	_warehouse_button = Button.new()
-	_warehouse_button.focus_mode = Control.FOCUS_NONE
-	_warehouse_button.custom_minimum_size = Vector2(118, 96)
-	_warehouse_button.text = "WAREHOUSE\n📦\n%d ore\n%d wood" % [GameState.WAREHOUSE_ORE_COST, GameState.WAREHOUSE_WOOD_COST]
-	_warehouse_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	UiStyle.style_button(_warehouse_button, 13)
-	_warehouse_button.tooltip_text = "Workers unload at the nearest warehouse or base; storage is shared."
-	_warehouse_button.pressed.connect(_on_warehouse_button_pressed)
-	row_build.add_child(_warehouse_button)
-
 	_skywatch_button = Button.new()
 	_skywatch_button.focus_mode = Control.FOCUS_NONE
 	_skywatch_button.custom_minimum_size = Vector2(118, 96)
@@ -518,6 +510,38 @@ func _setup_commander_build_ui() -> void:
 	_skywatch_button.tooltip_text = "Anti-air tower. Attacks flying enemies only. 20% more range than standard tower."
 	_skywatch_button.pressed.connect(_on_skywatch_button_pressed)
 	row_build.add_child(_skywatch_button)
+
+	var buildings_tab := MarginContainer.new()
+	buildings_tab.name = "Buildings"
+	buildings_tab.add_theme_constant_override("margin_left", 6)
+	buildings_tab.add_theme_constant_override("margin_top", 4)
+	buildings_tab.add_theme_constant_override("margin_right", 6)
+	buildings_tab.add_theme_constant_override("margin_bottom", 6)
+	tabs.add_child(buildings_tab)
+
+	var row_buildings := HBoxContainer.new()
+	row_buildings.alignment = BoxContainer.ALIGNMENT_BEGIN
+	buildings_tab.add_child(row_buildings)
+
+	_warehouse_button = Button.new()
+	_warehouse_button.focus_mode = Control.FOCUS_NONE
+	_warehouse_button.custom_minimum_size = Vector2(118, 96)
+	_warehouse_button.text = "WAREHOUSE\n📦\n%d ore\n%d wood" % [GameState.WAREHOUSE_ORE_COST, GameState.WAREHOUSE_WOOD_COST]
+	_warehouse_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_warehouse_button, 13)
+	_warehouse_button.tooltip_text = "Workers unload at the nearest warehouse or base; storage is shared."
+	_warehouse_button.pressed.connect(_on_warehouse_button_pressed)
+	row_buildings.add_child(_warehouse_button)
+
+	_market_building_button = Button.new()
+	_market_building_button.focus_mode = Control.FOCUS_NONE
+	_market_building_button.custom_minimum_size = Vector2(118, 96)
+	_market_building_button.text = "MARKET\n🏪\n%d ore\n%d wood" % [GameState.MARKET_ORE_COST, GameState.MARKET_WOOD_COST]
+	_market_building_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_market_building_button, 13)
+	_market_building_button.tooltip_text = "Passively generates coins over time. Upgradeable to Lv3 for faster income."
+	_market_building_button.pressed.connect(_on_market_building_button_pressed)
+	row_buildings.add_child(_market_building_button)
 
 	var attack_tab := MarginContainer.new()
 	attack_tab.name = "Attack"
@@ -558,6 +582,11 @@ func _setup_commander_build_ui() -> void:
 	market_tab.add_theme_constant_override("margin_right", 6)
 	market_tab.add_theme_constant_override("margin_bottom", 6)
 	tabs.add_child(market_tab)
+	_market_tab_idx = tabs.get_tab_count() - 1
+	tabs.set_tab_disabled(_market_tab_idx, not GameState.has_market_building)
+	GameState.market_building_changed.connect(func() -> void:
+		tabs.set_tab_disabled(_market_tab_idx, not GameState.has_market_building)
+	)
 
 	var market_scroll := ScrollContainer.new()
 	market_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -638,6 +667,10 @@ func _on_barracks_button_pressed() -> void:
 
 func _on_warehouse_button_pressed() -> void:
 	GameState.begin_warehouse_blueprint()
+
+
+func _on_market_building_button_pressed() -> void:
+	GameState.begin_market_blueprint()
 
 
 func _on_skywatch_button_pressed() -> void:
@@ -736,6 +769,8 @@ func _refresh_build_buttons() -> void:
 		_warehouse_button.disabled = not GameState.can_afford_build(GameState.BUILD_WAREHOUSE)
 	if _skywatch_button:
 		_skywatch_button.disabled  = not GameState.can_afford_build(GameState.BUILD_SKYWATCH)
+	if _market_building_button:
+		_market_building_button.disabled = not GameState.can_afford_build(GameState.BUILD_MARKET)
 
 
 func _refresh_ore_labels() -> void:
@@ -788,7 +823,7 @@ func _on_pending_build(pending: bool) -> void:
 	var gold := Color(1.0, 0.92, 0.45)
 	var white := Color.WHITE
 	if not pending:
-		for btn in [_tower_button, _barracks_button, _warehouse_button, _skywatch_button]:
+		for btn in [_tower_button, _barracks_button, _warehouse_button, _skywatch_button, _market_building_button]:
 			if btn: btn.modulate = white
 		return
 	var bt := GameState.awaiting_build_type
@@ -796,6 +831,7 @@ func _on_pending_build(pending: bool) -> void:
 	if _barracks_button: _barracks_button.modulate = gold if bt == GameState.BUILD_BARRACKS else white
 	if _warehouse_button:_warehouse_button.modulate= gold if bt == GameState.BUILD_WAREHOUSE else white
 	if _skywatch_button: _skywatch_button.modulate = gold if bt == GameState.BUILD_SKYWATCH  else white
+	if _market_building_button: _market_building_button.modulate = gold if bt == GameState.BUILD_MARKET else white
 
 
 func _setup_game_over_ui() -> void:
@@ -1787,11 +1823,12 @@ func _refresh_building_panel() -> void:
 
 	var lvl: int = int(_bld_selected.get(&"upgrade_level") if _bld_selected.get(&"upgrade_level") != null else 1)
 	var is_tower   := _bld_selected.is_in_group(&"tower")
-	var type_str   := "Tower" if is_tower else "Barracks"
+	var is_market  := _bld_selected.is_in_group(&"market_building")
+	var type_str   := "Tower" if is_tower else ("Market" if is_market else "Barracks")
 	_bld_title_lbl.text = "%s  (Level %d / 3)" % [type_str, lvl]
 	if _bld_flag_btn != null:
-		_bld_flag_btn.visible = not is_tower  # Flag only for Barracks
-		if not is_tower:
+		_bld_flag_btn.visible = not is_tower and not is_market  # Flag only for Barracks
+		if _bld_flag_btn.visible:
 			var placing := GameState.flag_placement_mode and \
 				GameState.flag_placement_barracks == _bld_selected
 			_bld_flag_btn.text     = "🚩 Placing… (click to set)" if placing else "🚩 Set Rally Flag"
@@ -1800,6 +1837,12 @@ func _refresh_building_panel() -> void:
 	if lvl >= 3:
 		_bld_upgrade_btn.text     = "⬆ Max Level"
 		_bld_upgrade_btn.disabled = true
+	elif is_market:
+		var mc := GameState.MARKET_UPGRADE_COIN_COSTS[lvl]
+		var mw := GameState.MARKET_UPGRADE_WOOD_COSTS[lvl]
+		var mo := GameState.MARKET_UPGRADE_ORE_COSTS[lvl]
+		_bld_upgrade_btn.text     = "⬆ Lv%d → Lv%d  (%dc / %dw / %do)" % [lvl, lvl+1, mc, mw, mo]
+		_bld_upgrade_btn.disabled = not GameState.can_afford_building_upgrade(_bld_selected)
 	else:
 		var cc := GameState.BUILDING_UPGRADE_COIN_COSTS[lvl]
 		var oc := GameState.BUILDING_UPGRADE_ORE_COSTS[lvl]

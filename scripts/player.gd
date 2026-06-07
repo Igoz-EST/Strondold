@@ -24,6 +24,7 @@ const _AVATAR_FEET_ALIGN_Y := -0.46
 const _TowerFactory := preload("res://scripts/tower_scene.gd")
 const _BarracksFactory := preload("res://scripts/barracks_scene.gd")
 const _WarehouseFactory := preload("res://scripts/warehouse_scene.gd")
+const _MarketFactory := preload("res://scripts/market_scene.gd")
 
 const SWING_OUT := 0.15
 const SWING_BACK := 0.2
@@ -757,6 +758,8 @@ func _create_build_preview(build_type: int) -> void:
 			_build_preview = _WarehouseFactory.create_warehouse()
 		GameState.BUILD_SKYWATCH:
 			_build_preview = load("res://scripts/skywatch_scene.gd").create_skywatch()
+		GameState.BUILD_MARKET:
+			_build_preview = _MarketFactory.create_market(1)
 		_:
 			return
 	_build_preview_type = build_type
@@ -1105,7 +1108,7 @@ func _try_select_building_raycast(screen_pos: Vector2) -> void:
 	if not result.is_empty():
 		var found := _building_from_collider(result.get("collider"))
 		if found != null:
-			print("Selected " + ("Tower" if found.is_in_group(&"tower") else "Barracks"))
+			print("Selected " + _building_kind_label(found))
 			GameState.building_selected.emit(found)
 			return
 
@@ -1116,14 +1119,24 @@ func _try_select_building_raycast(screen_pos: Vector2) -> void:
 	_try_select_building_radius(gp as Vector3)
 
 
+const _SELECTABLE_BUILDING_GROUPS := [&"tower", &"barracks", &"market_building"]
+
+
+func _building_kind_label(building: Node3D) -> String:
+	if building.is_in_group(&"tower"): return "Tower"
+	if building.is_in_group(&"market_building"): return "Market"
+	return "Barracks"
+
+
 func _building_from_collider(collider: Object) -> Node3D:
 	## Walk up the scene tree from the collider until we find a building node.
 	var n := collider as Node
 	while n != null:
 		if n is Node3D:
 			var n3 := n as Node3D
-			if n3.is_in_group(&"tower") or n3.is_in_group(&"barracks"):
-				return n3
+			for grp in _SELECTABLE_BUILDING_GROUPS:
+				if n3.is_in_group(grp):
+					return n3
 		n = n.get_parent()
 	return null
 
@@ -1132,7 +1145,7 @@ func _try_select_building_radius(world_pos: Vector3) -> void:
 	const PICK_R2 := 100.0   # 10-unit XZ radius
 	var best: Node3D = null
 	var best_d2 := PICK_R2
-	for grp in [&"tower", &"barracks"]:
+	for grp in _SELECTABLE_BUILDING_GROUPS:
 		for n in get_tree().get_nodes_in_group(grp):
 			if not (n is Node3D) or not is_instance_valid(n): continue
 			var np := (n as Node3D).global_position
@@ -1141,5 +1154,5 @@ func _try_select_building_radius(world_pos: Vector3) -> void:
 			var d2 := dx * dx + dz * dz
 			if d2 < best_d2: best_d2 = d2; best = n as Node3D
 	if best != null:
-		print("Selected " + ("Tower" if best.is_in_group(&"tower") else "Barracks"))
+		print("Selected " + _building_kind_label(best))
 		GameState.building_selected.emit(best)

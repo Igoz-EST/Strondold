@@ -4,6 +4,7 @@ const _TowerFactory    := preload("res://scripts/tower_scene.gd")
 const _BarracksFactory := preload("res://scripts/barracks_scene.gd")
 const _WarehouseFactory := preload("res://scripts/warehouse_scene.gd")
 const _SkywatchFactory  := preload("res://scripts/skywatch_scene.gd")
+const _MarketFactory    := preload("res://scripts/market_scene.gd")
 
 const TOWER_ORE_COST     := 200
 const TOWER_WOOD_COST    := 20
@@ -13,18 +14,25 @@ const WAREHOUSE_ORE_COST := 100
 const WAREHOUSE_WOOD_COST := 60
 const SKYWATCH_ORE_COST  := 200
 const SKYWATCH_WOOD_COST := 20
+const MARKET_ORE_COST    := 250
+const MARKET_WOOD_COST   := 200
 
 const BUILD_NONE     := -1
 const BUILD_TOWER    := 0
 const BUILD_BARRACKS := 1
 const BUILD_WAREHOUSE := 2
 const BUILD_SKYWATCH  := 3
+const BUILD_MARKET    := 4
 const DMG_UPGRADE_COST := 5
 const DMG_UPGRADE_AMOUNT := 10
 const ORE_PER_COIN := 100
 const WORKER_COST := 5
 const BUILDING_UPGRADE_COIN_COSTS: Array[int] = [0, 20, 30]
 const BUILDING_UPGRADE_ORE_COSTS: Array[int] = [0, 500, 1000]
+## Market upgrade costs include wood, unlike the generic tower/barracks costs above.
+const MARKET_UPGRADE_COIN_COSTS: Array[int] = [0, 40, 60]
+const MARKET_UPGRADE_WOOD_COSTS: Array[int] = [0, 100, 200]
+const MARKET_UPGRADE_ORE_COSTS:  Array[int] = [0, 100, 200]
 const GAME_MODE_MISSION   := 0
 const GAME_MODE_ENDLESS   := 1
 const GAME_MODE_MISSION_2 := 2
@@ -56,6 +64,7 @@ var infinite_resources: bool = false
 var unbreakable_base:   bool = false
 var flag_placement_mode:     bool    = false
 var flag_placement_barracks: Node3D = null
+var has_market_building: bool = false
 
 signal coins_changed(new_total: int)
 signal ore_changed(new_total: int)
@@ -68,6 +77,7 @@ signal base_destroyed
 signal pause_menu_toggle_requested
 signal building_selected(building: Node3D)
 signal flag_placement_changed
+signal market_building_changed
 
 
 func request_pause_menu_toggle() -> void:
@@ -178,6 +188,7 @@ func get_build_ore_cost(build_type: int) -> int:
 		BUILD_BARRACKS:  return BARRACKS_ORE_COST
 		BUILD_WAREHOUSE: return WAREHOUSE_ORE_COST
 		BUILD_SKYWATCH:  return SKYWATCH_ORE_COST
+		BUILD_MARKET:    return MARKET_ORE_COST
 	return 0
 
 
@@ -187,6 +198,7 @@ func get_build_wood_cost(build_type: int) -> int:
 		BUILD_BARRACKS:  return BARRACKS_WOOD_COST
 		BUILD_WAREHOUSE: return WAREHOUSE_WOOD_COST
 		BUILD_SKYWATCH:  return SKYWATCH_WOOD_COST
+		BUILD_MARKET:    return MARKET_WOOD_COST
 	return 0
 
 
@@ -296,13 +308,18 @@ func buy_building_upgrade(building: Node3D) -> bool:
 	if not is_instance_valid(building): return false
 	var lvl: int = int(building.get(&"upgrade_level") if building.get(&"upgrade_level") != null else 1)
 	if lvl >= 3: return false
-	var cost_c := BUILDING_UPGRADE_COIN_COSTS[lvl]
-	var cost_o := BUILDING_UPGRADE_ORE_COSTS[lvl]
-	if not infinite_resources and (coins < cost_c or ore < cost_o): return false
+	var is_market := building.is_in_group(&"market_building")
+	var cost_c := MARKET_UPGRADE_COIN_COSTS[lvl] if is_market else BUILDING_UPGRADE_COIN_COSTS[lvl]
+	var cost_o := MARKET_UPGRADE_ORE_COSTS[lvl]  if is_market else BUILDING_UPGRADE_ORE_COSTS[lvl]
+	var cost_w := MARKET_UPGRADE_WOOD_COSTS[lvl] if is_market else 0
+	if not infinite_resources and (coins < cost_c or ore < cost_o or wood < cost_w): return false
 	spend_coins(cost_c)
 	if not infinite_resources:
 		ore -= cost_o
 		ore_changed.emit(ore)
+		if cost_w > 0:
+			wood -= cost_w
+			wood_changed.emit(wood)
 	if building.has_method(&"apply_upgrade_level"):
 		building.call(&"apply_upgrade_level", lvl + 1)
 	return true
@@ -312,7 +329,11 @@ func can_afford_building_upgrade(building: Node3D) -> bool:
 	if not is_instance_valid(building): return false
 	var lvl: int = int(building.get(&"upgrade_level") if building.get(&"upgrade_level") != null else 1)
 	if lvl >= 3: return false
-	return infinite_resources or (coins >= BUILDING_UPGRADE_COIN_COSTS[lvl] and ore >= BUILDING_UPGRADE_ORE_COSTS[lvl])
+	if infinite_resources: return true
+	if building.is_in_group(&"market_building"):
+		return coins >= MARKET_UPGRADE_COIN_COSTS[lvl] and ore >= MARKET_UPGRADE_ORE_COSTS[lvl] \
+			and wood >= MARKET_UPGRADE_WOOD_COSTS[lvl]
+	return coins >= BUILDING_UPGRADE_COIN_COSTS[lvl] and ore >= BUILDING_UPGRADE_ORE_COSTS[lvl]
 
 
 func _apply_level_to_group(group_name: StringName, level: int) -> void:
@@ -362,6 +383,15 @@ func begin_skywatch_blueprint() -> void:
 	if awaiting_build_type != BUILD_NONE:     cancel_tower_blueprint()
 	if not can_afford_build(BUILD_SKYWATCH): return
 	awaiting_build_type = BUILD_SKYWATCH
+	pending_build_changed.emit(true)
+
+
+func begin_market_blueprint() -> void:
+	if not commander_active: return
+	if awaiting_build_type == BUILD_MARKET: cancel_tower_blueprint(); return
+	if awaiting_build_type != BUILD_NONE:   cancel_tower_blueprint()
+	if not can_afford_build(BUILD_MARKET): return
+	awaiting_build_type = BUILD_MARKET
 	pending_build_changed.emit(true)
 
 
@@ -433,6 +463,12 @@ func try_place_tower(world_pos: Vector3) -> bool:
 		var skywatch: StaticBody3D = _SkywatchFactory.create_skywatch()
 		world.add_child(skywatch)
 		skywatch.global_position = p
+	elif build_type == BUILD_MARKET:
+		var market := _MarketFactory.create_market(1)
+		world.add_child(market)
+		market.global_position = p
+		has_market_building = true
+		market_building_changed.emit()
 	else:
 		var warehouse := _WarehouseFactory.create_warehouse()
 		world.add_child(warehouse)
