@@ -1,7 +1,7 @@
 extends CharacterBody3D
 
 const LAYER_ENEMY          := 256
-const WARRIOR_VISION_RANGE := 42.0
+const WARRIOR_VISION_RANGE := 18.0
 const GRAVITY              := 30.0
 const ATTACK_INTERVAL      := 0.85
 const BASE_TARGET          := Vector3(6.0, 0.55, 0.0)

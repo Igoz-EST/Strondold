@@ -469,7 +469,7 @@ func _setup_commander_build_ui() -> void:
 	bar.add_child(tabs)
 
 	var build_tab := MarginContainer.new()
-	build_tab.name = "Build"
+	build_tab.name = "Defence"
 	build_tab.add_theme_constant_override("margin_left", 6)
 	build_tab.add_theme_constant_override("margin_top", 4)
 	build_tab.add_theme_constant_override("margin_right", 6)
@@ -518,6 +518,14 @@ func _setup_commander_build_ui() -> void:
 	_skywatch_button.tooltip_text = "Anti-air tower. Attacks flying enemies only. 20% more range than standard tower."
 	_skywatch_button.pressed.connect(_on_skywatch_button_pressed)
 	row_build.add_child(_skywatch_button)
+
+	var attack_tab := MarginContainer.new()
+	attack_tab.name = "Attack"
+	attack_tab.add_theme_constant_override("margin_left", 6)
+	attack_tab.add_theme_constant_override("margin_top", 4)
+	attack_tab.add_theme_constant_override("margin_right", 6)
+	attack_tab.add_theme_constant_override("margin_bottom", 6)
+	tabs.add_child(attack_tab)
 
 	var upgrades_tab := MarginContainer.new()
 	upgrades_tab.name = "Upgrades"

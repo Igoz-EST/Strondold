@@ -3,6 +3,9 @@
 [ext_resource type="Script" uid="uid://c88wfdjnsqa25" path="res://addons/zylann.hterrain/hterrain.gd" id="1_r114s"]
 [ext_resource type="Resource" uid="uid://ihc5b4vtbn5b" path="res://terrain_data/mission2/data.hterrain" id="2_vlrf6"]
 [ext_resource type="Script" uid="uid://qakk6103d48u" path="res://addons/zylann.hterrain/hterrain_texture_set.gd" id="3_usp04"]
+[ext_resource type="PackedScene" uid="uid://slkj7i4wjhyt" path="res://assets/environment/Lowpoly Tree Sample.glb" id="4_s3b5n"]
+[ext_resource type="PackedScene" uid="uid://dxsuxd3qghv6e" path="res://assets/environment/Rock Large.glb" id="5_jkscw"]
+[ext_resource type="PackedScene" uid="uid://biry518i6l3wq" path="res://assets/environment/Grass.glb" id="6_eojv1"]
 
 [sub_resource type="Resource" id="Resource_s3b5n"]
 script = ExtResource("3_usp04")
@@ -43,3 +46,135 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 255.31772, 0, 88.43449)
 
 [node name="Path3D" type="Path3D" parent="." unique_id=569874822]
 curve = SubResource("Curve3D_r114s")
+
+[node name="Lowpoly Tree Sample" parent="." unique_id=251683149 instance=ExtResource("4_s3b5n")]
+transform = Transform3D(0.4174659, 0, 0, 0, 0.37460712, 0, 0, 0, 0.62047076, 133.28833, 0.23706436, 114.31149)
+
+[node name="Lowpoly Tree Sample2" parent="." unique_id=979927077 instance=ExtResource("4_s3b5n")]
+transform = Transform3D(0.29620764, 0, 0, 0, 0.360618, 0, 0, 0, 0.6422257, 168.46548, 0.46614265, 144.47609)
+
+[node name="Lowpoly Tree Sample3" parent="." unique_id=89223714 instance=ExtResource("4_s3b5n")]
+transform = Transform3D(0.4174659, 0, 0, 0, 0.37460712, 0, 0, 0, 0.62047076, 189.72629, 0.23706627, 114.31149)
+
+[node name="Root Scene" parent="." unique_id=1997037955 instance=ExtResource("5_jkscw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 134.91649, 0.31551144, 290.61176)
+
+[node name="Root Scene2" parent="." unique_id=147388175 instance=ExtResource("5_jkscw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 384.62183, 0.31551147, 333.78345)
+
+[node name="Root Scene3" parent="." unique_id=1064999039 instance=ExtResource("5_jkscw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 402.5426, -1.3302326, 291.06842)
+
+[node name="Root Scene4" parent="." unique_id=1961495761 instance=ExtResource("5_jkscw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 386.6327, 0.31551144, 271.86472)
+
+[node name="Root Scene5" parent="." unique_id=1818965987 instance=ExtResource("5_jkscw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 103.291885, 0.3155112, 235.34435)
+
+[node name="Root Scene6" parent="." unique_id=84117114 instance=ExtResource("5_jkscw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 126.19864, -1.8347876, 285.46365)
+
+[node name="Root Scene7" parent="." unique_id=1276262955 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 239.57053, 0.0054863277, 274.17422)
+
+[node name="Root Scene8" parent="." unique_id=1576873011 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 203.57524, 0.0054863277, 290.94595)
+
+[node name="Root Scene9" parent="." unique_id=192299322 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 217.79529, 0.0054860893, 274.91565)
+
+[node name="Root Scene10" parent="." unique_id=1716904910 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 225.6462, 0.0054863277, 293.78668)
+
+[node name="Root Scene11" parent="." unique_id=528046371 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 193.16309, 0.0054863277, 233.81435)
+
+[node name="Root Scene12" parent="." unique_id=1081380301 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 204.93468, 0.0054863277, 221.2759)
+
+[node name="Root Scene13" parent="." unique_id=2004576494 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 222.64172, 0.0054863277, 243.52663)
+
+[node name="Root Scene14" parent="." unique_id=324775456 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 252.05858, 0.0054863277, 222.4432)
+
+[node name="Root Scene15" parent="." unique_id=967325779 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 156.21185, 0.0054863277, 289.617)
+
+[node name="Root Scene16" parent="." unique_id=1025466981 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 117.965454, 0.0054863277, 247.32274)
+
+[node name="Root Scene17" parent="." unique_id=2062863478 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 152.16687, 0.0054863277, 279.60352)
+
+[node name="Root Scene18" parent="." unique_id=1326067037 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 240.78928, 0.0054863277, 345.2373)
+
+[node name="Root Scene19" parent="." unique_id=1110108806 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 218.30609, 0.024526596, 328.58722)
+
+[node name="Root Scene20" parent="." unique_id=747779617 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 159.49493, 0.0054863277, 346.2395)
+
+[node name="Root Scene21" parent="." unique_id=263731670 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 167.49185, 0.0054863277, 331.77075)
+
+[node name="Root Scene22" parent="." unique_id=1015155930 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 141.10611, 0.0054863277, 335.15634)
+
+[node name="Root Scene23" parent="." unique_id=850388361 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 119.755936, 0.0054863277, 308.76794)
+
+[node name="Root Scene24" parent="." unique_id=1105094343 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 103.69345, 0.005486313, 271.6819)
+
+[node name="Root Scene25" parent="." unique_id=1957314771 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 83.12549, 0.0054863277, 204.28554)
+
+[node name="Root Scene26" parent="." unique_id=1044886590 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 135.24763, 0.0054863277, 176.21953)
+
+[node name="Root Scene27" parent="." unique_id=483756019 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 235.9649, 0.0054863277, 161.1258)
+
+[node name="Root Scene28" parent="." unique_id=682723564 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 163.66818, 0.0054863277, 162.96121)
+
+[node name="Root Scene29" parent="." unique_id=1021783230 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 342.19995, 0.0054863277, 203.18607)
+
+[node name="Root Scene30" parent="." unique_id=859923086 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 329.32327, 0.0054863277, 241.23369)
+
+[node name="Root Scene31" parent="." unique_id=606676534 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 297.92294, 0.0054863277, 208.03702)
+
+[node name="Root Scene32" parent="." unique_id=1197975084 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 320.5541, 0.0054863277, 318.68872)
+
+[node name="Root Scene33" parent="." unique_id=2041376582 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 310.826, 0.0054862085, 301.9601)
+
+[node name="Root Scene34" parent="." unique_id=166261310 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 289.87564, 0.0054863277, 245.42665)
+
+[node name="Root Scene35" parent="." unique_id=811702467 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 373.84335, 0.0054863277, 152.42987)
+
+[node name="Root Scene36" parent="." unique_id=589341556 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 311.79388, 0.0054863277, 114.983826)
+
+[node name="Root Scene37" parent="." unique_id=1690358810 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 107.20415, 0.0054863277, 359.02875)
+
+[node name="Root Scene38" parent="." unique_id=682494019 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140.22261, 0.0054863277, 384.1245)
+
+[node name="Root Scene39" parent="." unique_id=361376460 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 84.14928, 0.0054863277, 393.68292)
+
+[node name="Root Scene40" parent="." unique_id=469654248 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 311.95773, 0.0054863277, 387.8183)
+
+[node name="Root Scene41" parent="." unique_id=1701481098 instance=ExtResource("6_eojv1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 342.92358, 0.005485374, 396.1388)

@@ -5,6 +5,7 @@
 [ext_resource type="Script" uid="uid://ca5iuvgsbmh8l" path="res://scripts/base_fortress_visual.gd" id="3_fortress"]
 [ext_resource type="PackedScene" uid="uid://cno3m80v8dsjl" path="res://scenes/missions/mission2/h_terrain.tscn" id="4_terrain"]
 [ext_resource type="Script" path="res://scripts/mission2_manager.gd" id="5_manager"]
+[ext_resource type="Script" path="res://scripts/mission2_resources.gd" id="6_resources"]
 
 [sub_resource type="BoxShape3D" id="BoxShape_player"]
 
@@ -92,3 +93,6 @@ far = 420.0
 
 [node name="Mission2Manager" type="Node3D" parent="."]
 script = ExtResource("5_manager")
+
+[node name="Mission2Resources" type="Node3D" parent="."]
+script = ExtResource("6_resources")
