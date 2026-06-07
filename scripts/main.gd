@@ -9,6 +9,8 @@ const _PauseEscListenerScript := preload("res://scripts/pause_menu_esc_listener.
 const _WorldBuilderScript := preload("res://scripts/world_builder.gd")
 const _WarriorScene       := preload("res://scenes/warrior.tscn")
 const _GiantWarriorScript := preload("res://scripts/giant_warrior.gd")
+const _AttackKnightScript := preload("res://scripts/attack_knight.gd")
+const _AttackGiantScript  := preload("res://scripts/attack_giant_warrior.gd")
 const _EnemyScene         := preload("res://scenes/enemy.tscn")
 
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -83,6 +85,8 @@ var _skywatch_button: Button
 var _barracks_button: Button
 var _warehouse_button: Button
 var _market_building_button: Button
+var _attack_knight_button: Button
+var _attack_giant_button: Button
 var _dmg_upgrade_button: Button
 var _market_tab_idx: int = -1
 var _bld_panel_layer:      CanvasLayer
@@ -551,6 +555,30 @@ func _setup_commander_build_ui() -> void:
 	attack_tab.add_theme_constant_override("margin_bottom", 6)
 	tabs.add_child(attack_tab)
 
+	var row_attack := HBoxContainer.new()
+	row_attack.alignment = BoxContainer.ALIGNMENT_BEGIN
+	attack_tab.add_child(row_attack)
+
+	_attack_knight_button = Button.new()
+	_attack_knight_button.focus_mode = Control.FOCUS_NONE
+	_attack_knight_button.custom_minimum_size = Vector2(118, 96)
+	_attack_knight_button.text = "KNIGHT\n⚔\n%d coins" % GameState.ATTACK_KNIGHT_COIN_COST
+	_attack_knight_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_attack_knight_button, 13)
+	_attack_knight_button.tooltip_text = "Sends a Knight from the base to march down the path and fight the first enemy it meets."
+	_attack_knight_button.pressed.connect(_on_attack_knight_button_pressed)
+	row_attack.add_child(_attack_knight_button)
+
+	_attack_giant_button = Button.new()
+	_attack_giant_button.focus_mode = Control.FOCUS_NONE
+	_attack_giant_button.custom_minimum_size = Vector2(118, 96)
+	_attack_giant_button.text = "GIANT WARRIOR\n🛡\n%d coins" % GameState.ATTACK_GIANT_COIN_COST
+	_attack_giant_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_attack_giant_button, 13)
+	_attack_giant_button.tooltip_text = "Sends a Giant Warrior from the base to march down the path and crush the enemies it meets."
+	_attack_giant_button.pressed.connect(_on_attack_giant_button_pressed)
+	row_attack.add_child(_attack_giant_button)
+
 	var upgrades_tab := MarginContainer.new()
 	upgrades_tab.name = "Upgrades"
 	upgrades_tab.add_theme_constant_override("margin_left", 6)
@@ -677,6 +705,30 @@ func _on_skywatch_button_pressed() -> void:
 	GameState.begin_skywatch_blueprint()
 
 
+func _on_attack_knight_button_pressed() -> void:
+	if not GameState.spend_coins(GameState.ATTACK_KNIGHT_COIN_COST):
+		return
+	var k := _WarriorScene.instantiate() as CharacterBody3D
+	k.set_script(_AttackKnightScript)
+	add_child(k)
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		_gw_place_m2(k)
+	else:
+		k.global_position = Vector3(7.0, 0.55, 22.0)
+
+
+func _on_attack_giant_button_pressed() -> void:
+	if not GameState.spend_coins(GameState.ATTACK_GIANT_COIN_COST):
+		return
+	var gw := _WarriorScene.instantiate() as CharacterBody3D
+	gw.set_script(_AttackGiantScript)
+	add_child(gw)
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		_gw_place_m2(gw)
+	else:
+		gw.global_position = Vector3(7.0, 0.55, 22.0)
+
+
 func _on_dmg_upgrade_pressed() -> void:
 	GameState.buy_dmg_upgrade()
 	_refresh_upgrade_buttons()
@@ -801,6 +853,10 @@ func _on_coins_changed(total: int) -> void:
 	_coin_label.text = "Coins: %d" % total
 	if _dmg_upgrade_button:
 		_dmg_upgrade_button.disabled = total < GameState.DMG_UPGRADE_COST
+	if _attack_knight_button:
+		_attack_knight_button.disabled = total < GameState.ATTACK_KNIGHT_COIN_COST
+	if _attack_giant_button:
+		_attack_giant_button.disabled = total < GameState.ATTACK_GIANT_COIN_COST
 	_refresh_build_buttons()
 	_refresh_upgrade_buttons()
 	_refresh_workers_ui()
