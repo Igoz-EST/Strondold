@@ -55,32 +55,39 @@ func _spawn_wave_index(idx: int) -> void:
 		return
 	match idx:
 		0:
-			_spawn_group(world, 10, 0, 0)
+			_spawn_group(world, 8,  0, 0, 0, 0, 0)
 			GameState.add_coins(10)
 		1:
-			_spawn_group(world, 15, 0, 0)
+			_spawn_group(world, 12, 3, 0, 0, 0, 0)
 			GameState.add_coins(10)
 		2:
-			_spawn_group(world, 20, 2, 0)
-			GameState.add_coins(10)
+			_spawn_group(world, 14, 4, 0, 3, 0, 0)
+			GameState.add_coins(15)
 		3:
-			_spawn_group(world, 30, 6, 1)
+			_spawn_group(world, 18, 5, 1, 2, 0, 0)
 			GameState.add_coins(15)
 		4:
-			_spawn_group(world, 35, 8, 2)
+			_spawn_group(world, 20, 6, 0, 0, 4, 2)
 			GameState.add_coins(20)
 		5:
-			_spawn_group(world, 40, 10, 3)
+			_spawn_group(world, 25, 8, 2, 4, 4, 3)
 			GameState.add_coins(25)
 
 
-func _spawn_group(world: Node, normal_n: int, big_n: int, boss_n: int) -> void:
+func _spawn_group(world: Node, normal_n: int, big_n: int, boss_n: int,
+		golem_n: int = 0, demon_n: int = 0, bat_pig_n: int = 0) -> void:
 	for i: int in normal_n:
-		_spawn_one(world, KIND_NORMAL, i * 0.02)
+		_spawn_one(world, KIND_NORMAL,  i * 0.02)
 	for j: int in big_n:
-		_spawn_one(world, KIND_BIG, 0.15 + j * 0.02)
+		_spawn_one(world, KIND_BIG,     0.15 + j * 0.02)
 	for k: int in boss_n:
-		_spawn_one(world, KIND_BOSS, 0.35 + k * 0.02)
+		_spawn_one(world, KIND_BOSS,    0.35 + k * 0.02)
+	for l: int in golem_n:
+		_spawn_one(world, KIND_GOLEM,   0.55 + l * 0.02)
+	for m: int in demon_n:
+		_spawn_one(world, KIND_DEMON,   0.75 + m * 0.02)
+	for n: int in bat_pig_n:
+		_spawn_one(world, KIND_BAT_PIG, 0.95 + n * 0.02)
 
 
 func _spawn_endless_wave() -> void:
