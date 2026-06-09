@@ -1,7 +1,7 @@
 extends Node
 
-## Времена волн от старта сцены (сек): 3 мин, 5 мин, 10 мин, 20 мин.
-const WAVE_TIMES_SEC := [180.0, 300.0, 600.0, 1200.0]
+## Времена волн от старта сцены (сек): 1.5 мин, 3.5 мин, 6 мин, 9 мин, 12 мин, 15 мин.
+const WAVE_TIMES_SEC := [90.0, 210.0, 360.0, 540.0, 720.0, 900.0]
 
 const _EnemyScene := preload("res://scenes/enemy.tscn")
 
@@ -15,7 +15,7 @@ const KIND_BAT_PIG := 5
 const SPAWN_RADIUS := 132.0
 
 var _elapsed := 0.0
-var _wave_spawned: Array[bool] = [false, false, false, false]
+var _wave_spawned: Array[bool] = [false, false, false, false, false, false]
 var _endless_wave := 0
 var _next_endless_wave_at := 300.0
 
@@ -56,13 +56,22 @@ func _spawn_wave_index(idx: int) -> void:
 	match idx:
 		0:
 			_spawn_group(world, 10, 0, 0)
+			GameState.add_coins(10)
 		1:
 			_spawn_group(world, 15, 0, 0)
+			GameState.add_coins(10)
 		2:
 			_spawn_group(world, 20, 2, 0)
+			GameState.add_coins(10)
 		3:
-			_spawn_group(world, 25, 5, 1)
-	GameState.add_coins(10)
+			_spawn_group(world, 30, 6, 1)
+			GameState.add_coins(15)
+		4:
+			_spawn_group(world, 35, 8, 2)
+			GameState.add_coins(20)
+		5:
+			_spawn_group(world, 40, 10, 3)
+			GameState.add_coins(25)
 
 
 func _spawn_group(world: Node, normal_n: int, big_n: int, boss_n: int) -> void:
