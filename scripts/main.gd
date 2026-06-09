@@ -34,37 +34,66 @@ const ENDLESS_BREAKABLE_MULTIPLIER := 3
 const MINE_CLEAR_RADIUS := 15.0
 const BREAKABLE_CLEAR_RADIUS := 4.6
 
-const _CASINO_REWARDS := [
-	{"id": "coin1",        "label": "1\nCoin",    "weight": 35.0},
-	{"id": "coin5",        "label": "5\nCoins",   "weight": 25.0},
-	{"id": "coin10",       "label": "10\nCoins",  "weight": 15.0},
-	{"id": "coin20",       "label": "20\nCoins",  "weight": 7.0},
-	{"id": "ore200",       "label": "200\nOre",   "weight": 5.0},
-	{"id": "wood200",      "label": "200\nWood",  "weight": 5.0},
-	{"id": "coin100",      "label": "100\nCoins", "weight": 2.0},
-	{"id": "empty",        "label": "Empty",      "weight": 25.0},
-	{"id": "enemy_attack", "label": "ATTACK!",    "weight": 3.0},
+const _CASINO_POOLS: Array = [
+	# Tier 0 — 1 coin
+	[
+		{"id": "empty",        "label": "Empty",         "weight": 50},
+		{"id": "enemy_attack", "label": "ATTACK!",       "weight": 5},
+		{"id": "coin1",        "label": "+1\nCoin",      "weight": 20},
+		{"id": "coin3",        "label": "+3\nCoins",     "weight": 12},
+		{"id": "coin10",       "label": "+10\nCoins",    "weight": 5},
+		{"id": "wood50",       "label": "50\nWood",      "weight": 7},
+		{"id": "giant",        "label": "GIANT\nWARRIOR","weight": 1},
+	],
+	# Tier 1 — 5 coins
+	[
+		{"id": "empty",        "label": "Empty",         "weight": 42},
+		{"id": "enemy_attack", "label": "ATTACK!",       "weight": 5},
+		{"id": "coin3",        "label": "+3\nCoins",     "weight": 18},
+		{"id": "coin8",        "label": "+8\nCoins",     "weight": 12},
+		{"id": "coin20",       "label": "+20\nCoins",    "weight": 8},
+		{"id": "ore100",       "label": "100\nOre",      "weight": 3},
+		{"id": "coin50",       "label": "+50\nCoins",    "weight": 2},
+		{"id": "wood100",      "label": "100\nWood",     "weight": 7},
+		{"id": "giant",        "label": "GIANT\nWARRIOR","weight": 3},
+	],
+	# Tier 2 — 10 coins
+	[
+		{"id": "empty",        "label": "Empty",         "weight": 30},
+		{"id": "enemy_attack", "label": "ATTACK!",       "weight": 3},
+		{"id": "coin5",        "label": "+5\nCoins",     "weight": 14},
+		{"id": "coin15",       "label": "+15\nCoins",    "weight": 15},
+		{"id": "coin35",       "label": "+35\nCoins",    "weight": 13},
+		{"id": "ore200",       "label": "200\nOre",      "weight": 8},
+		{"id": "coin100",      "label": "+100\nCoins",   "weight": 1},
+		{"id": "wood200",      "label": "200\nWood",     "weight": 7},
+		{"id": "free_knight",  "label": "FREE\nKNIGHT",  "weight": 4},
+		{"id": "giant",        "label": "GIANT\nWARRIOR","weight": 5},
+	],
 ]
-# Giant jackpot — separate from loot table, index = _CASINO_REWARDS.size() = 9
-const _CASINO_GIANT := {"id": "giant", "label": "GIANT\nWARRIOR"}
-# Jackpot curve: [bet, chance] — linear interpolation between points, capped at last
-const _CASINO_JP_CURVE := [
-	[1,   0.0001], [5,   0.0003], [10,  0.0008],
-	[25,  0.002],  [50,  0.01],   [100, 0.03], [250, 0.05],
-]
-# BG colors: indices 0-8 = REWARDS, index 9 = giant
-const _CASINO_BG := [
-	Color(0.35, 0.30, 0.08), Color(0.40, 0.34, 0.09), Color(0.45, 0.38, 0.10),
-	Color(0.55, 0.46, 0.00), Color(0.04, 0.22, 0.38), Color(0.25, 0.12, 0.02),
-	Color(0.45, 0.20, 0.00), Color(0.10, 0.10, 0.10), Color(0.30, 0.04, 0.04),
-	Color(0.22, 0.00, 0.38),
-]
-const _CASINO_TXT := [
-	Color(0.95, 0.85, 0.30), Color(0.95, 0.85, 0.30), Color(0.95, 0.85, 0.30),
-	Color(1.00, 0.95, 0.30), Color(0.40, 0.90, 1.00), Color(0.75, 0.48, 0.15),
-	Color(1.00, 0.58, 0.10), Color(0.38, 0.38, 0.38), Color(1.00, 0.22, 0.18),
-	Color(0.88, 0.45, 1.00),
-]
+const _CASINO_TIER_COSTS: Array[int] = [1, 5, 10]
+const _CASINO_BG: Dictionary = {
+	"empty":        Color(0.10, 0.10, 0.10),
+	"enemy_attack": Color(0.30, 0.04, 0.04),
+	"giant":        Color(0.22, 0.00, 0.38),
+	"free_knight":  Color(0.04, 0.16, 0.34),
+	"ore100":       Color(0.04, 0.18, 0.38),
+	"ore200":       Color(0.04, 0.18, 0.38),
+	"wood50":       Color(0.22, 0.10, 0.03),
+	"wood100":      Color(0.22, 0.10, 0.03),
+	"wood200":      Color(0.22, 0.10, 0.03),
+}
+const _CASINO_TXT: Dictionary = {
+	"empty":        Color(0.38, 0.38, 0.38),
+	"enemy_attack": Color(1.00, 0.22, 0.18),
+	"giant":        Color(0.88, 0.45, 1.00),
+	"free_knight":  Color(0.40, 0.90, 1.00),
+	"ore100":       Color(0.40, 0.90, 1.00),
+	"ore200":       Color(0.40, 0.90, 1.00),
+	"wood50":       Color(0.75, 0.48, 0.15),
+	"wood100":      Color(0.75, 0.48, 0.15),
+	"wood200":      Color(0.75, 0.48, 0.15),
+}
 const _CASINO_ITEM_W  := 86
 const _CASINO_ITEM_H  := 60
 const _CASINO_SEP     := 2
@@ -109,9 +138,8 @@ var _spawn_queue: Array = []
 var _spawn_timer_left: float = 0.0
 var _spawn_queue_row: HBoxContainer
 
-var _casino_bet_slider: HSlider
-var _casino_bet_label:  Label
-var _casino_mult_label: Label
+var _casino_tier: int = 0
+var _casino_tier_btns: Array[Button] = []
 var _casino_roll_btn:   Button
 var _casino_result_lbl: Label
 var _casino_strip_row:  HBoxContainer
@@ -1581,49 +1609,32 @@ func _build_casino_tab(tabs: TabContainer) -> void:
 	col.add_theme_constant_override("separation", 5)
 	tab.add_child(col)
 
-	# — Bet row —
-	var bet_row := HBoxContainer.new()
-	bet_row.add_theme_constant_override("separation", 6)
-	col.add_child(bet_row)
+	# — Tier buttons row —
+	var tier_row := HBoxContainer.new()
+	tier_row.add_theme_constant_override("separation", 6)
+	col.add_child(tier_row)
 
-	var bet_lbl := Label.new()
-	bet_lbl.text = "BET:"
-	UiStyle.style_label(bet_lbl, UiStyle.TEXT_MAIN, 14, 2)
-	bet_row.add_child(bet_lbl)
+	var tier_lbl := Label.new()
+	tier_lbl.text = "BET:"
+	UiStyle.style_label(tier_lbl, UiStyle.TEXT_MAIN, 14, 2)
+	tier_row.add_child(tier_lbl)
 
-	_casino_bet_slider = HSlider.new()
-	_casino_bet_slider.min_value             = 1.0
-	_casino_bet_slider.max_value             = float(maxi(1, GameState.coins))
-	_casino_bet_slider.step                  = 1.0
-	_casino_bet_slider.value                 = 1.0
-	_casino_bet_slider.custom_minimum_size   = Vector2(140, 24)
-	_casino_bet_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_casino_bet_slider.focus_mode            = Control.FOCUS_NONE
-	_casino_bet_slider.value_changed.connect(_on_casino_bet_changed)
-	# Visible track styling
-	var sl_bg := StyleBoxFlat.new()
-	sl_bg.bg_color = Color(0.18, 0.16, 0.12)
-	sl_bg.set_corner_radius_all(3)
-	sl_bg.content_margin_top    = 8.0
-	sl_bg.content_margin_bottom = 8.0
-	_casino_bet_slider.add_theme_stylebox_override(&"slider", sl_bg)
-	var sl_fill := StyleBoxFlat.new()
-	sl_fill.bg_color = Color(0.75, 0.60, 0.10)
-	sl_fill.set_corner_radius_all(3)
-	sl_fill.content_margin_top    = 8.0
-	sl_fill.content_margin_bottom = 8.0
-	_casino_bet_slider.add_theme_stylebox_override(&"grabber_area", sl_fill)
-	_casino_bet_slider.add_theme_constant_override(&"grabber_offset", 0)
-	bet_row.add_child(_casino_bet_slider)
-
-	_casino_bet_label = Label.new()
-	_casino_bet_label.custom_minimum_size = Vector2(80, 0)
-	UiStyle.style_label(_casino_bet_label, UiStyle.TEXT_COIN, 14, 2)
-	bet_row.add_child(_casino_bet_label)
-
-	_casino_mult_label = Label.new()
-	UiStyle.style_label(_casino_mult_label, Color(0.80, 0.50, 1.0), 13, 2)
-	col.add_child(_casino_mult_label)
+	_casino_tier_btns.clear()
+	var tier_labels := ["1 coin", "5 coins", "10 coins"]
+	for i in 3:
+		var btn := Button.new()
+		btn.text = tier_labels[i]
+		btn.custom_minimum_size = Vector2(70, 28)
+		btn.focus_mode = Control.FOCUS_NONE
+		UiStyle.style_button(btn, 14)
+		var idx := i
+		btn.pressed.connect(func() -> void:
+			_casino_tier = idx
+			_casino_update_ui()
+			_casino_build_strip_initial()
+		)
+		tier_row.add_child(btn)
+		_casino_tier_btns.append(btn)
 
 	_casino_result_lbl = Label.new()
 	_casino_result_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1665,28 +1676,33 @@ func _build_casino_tab(tabs: TabContainer) -> void:
 	col.add_child(_casino_roll_btn)
 
 	_casino_update_ui()
-
-
-func _on_casino_bet_changed(_v: float) -> void:
-	_casino_update_ui()
+	_casino_build_strip_initial()
 
 
 func _casino_update_ui() -> void:
-	if _casino_bet_slider == null:
+	if _casino_roll_btn == null:
 		return
-	_casino_bet_slider.max_value = float(maxi(1, GameState.coins))
-	_casino_bet_slider.value = clampf(_casino_bet_slider.value, 1.0, float(maxi(1, GameState.coins)))
-	var bet := int(_casino_bet_slider.value)
-	if _casino_bet_label:
-		_casino_bet_label.text = "%d / %d coins" % [bet, GameState.coins]
-	if _casino_mult_label:
-		_casino_mult_label.text = "Giant: %.2f%%" % (_casino_jackpot_chance(bet) * 100.0)
-	if _casino_roll_btn:
-		_casino_roll_btn.disabled = _casino_rolling or GameState.coins < bet
+	var bet := _CASINO_TIER_COSTS[_casino_tier]
+	_casino_roll_btn.disabled = _casino_rolling or GameState.coins < bet
+	for i in _casino_tier_btns.size():
+		var btn: Button = _casino_tier_btns[i]
+		if i == _casino_tier:
+			var sbox := StyleBoxFlat.new()
+			sbox.bg_color = Color(0.70, 0.55, 0.08)
+			sbox.border_color = Color(1.0, 0.88, 0.30)
+			sbox.set_border_width_all(2)
+			sbox.set_corner_radius_all(4)
+			sbox.content_margin_left = 6; sbox.content_margin_right = 6
+			sbox.content_margin_top = 4;  sbox.content_margin_bottom = 4
+			btn.add_theme_stylebox_override(&"normal", sbox)
+			btn.add_theme_stylebox_override(&"hover",  sbox)
+		else:
+			btn.remove_theme_stylebox_override(&"normal")
+			btn.remove_theme_stylebox_override(&"hover")
 
 
 func _on_casino_roll_pressed() -> void:
-	var bet := int(_casino_bet_slider.value)
+	var bet := _CASINO_TIER_COSTS[_casino_tier]
 	if _casino_rolling or GameState.coins < bet:
 		return
 	if not GameState.spend_coins(bet):
@@ -1694,42 +1710,35 @@ func _on_casino_roll_pressed() -> void:
 	_casino_rolling = true
 	_casino_roll_btn.disabled = true
 	_casino_result_lbl.text = "Rolling..."
-	var reward: Dictionary = _casino_pick_reward(bet)
+	var reward: Dictionary = _casino_pick_reward(_casino_tier)
 	_casino_build_strip(reward)
 	_casino_animate(reward)
 
 
-func _casino_jackpot_chance(bet: int) -> float:
-	var b := float(bet)
-	if b <= _CASINO_JP_CURVE[0][0]:
-		return _CASINO_JP_CURVE[0][1]
-	if b >= _CASINO_JP_CURVE[-1][0]:
-		return _CASINO_JP_CURVE[-1][1]
-	for i in range(_CASINO_JP_CURVE.size() - 1):
-		var lo: Array = _CASINO_JP_CURVE[i]
-		var hi: Array = _CASINO_JP_CURVE[i + 1]
-		if b >= float(lo[0]) and b < float(hi[0]):
-			var t := (b - float(lo[0])) / (float(hi[0]) - float(lo[0]))
-			return lerpf(float(lo[1]), float(hi[1]), t)
-	return _CASINO_JP_CURVE[-1][1]
-
-
-func _casino_pick_reward(bet: int) -> Dictionary:
-	# Giant jackpot roll first
-	var jp := _casino_jackpot_chance(bet)
-	if jp > 0.0 and randf() < jp:
-		return _CASINO_GIANT
-	# Static weighted roll
+func _casino_pick_reward(tier: int) -> Dictionary:
+	var pool: Array = _CASINO_POOLS[tier]
 	var total := 0.0
-	for r in _CASINO_REWARDS:
+	for r in pool:
 		total += float(r["weight"])
 	var roll := randf() * total
 	var acc  := 0.0
-	for r in _CASINO_REWARDS:
+	for r in pool:
 		acc += float(r["weight"])
 		if roll < acc:
 			return r
-	return _CASINO_REWARDS[0]
+	return pool[0]
+
+
+func _casino_build_strip_initial() -> void:
+	if _casino_strip_row == null:
+		return
+	for c in _casino_strip_row.get_children():
+		_casino_strip_row.remove_child(c)
+		c.free()
+	_casino_strip_row.position.x = 0.0
+	var pool: Array = _CASINO_POOLS[_casino_tier]
+	for _i in _CASINO_TOTAL:
+		_casino_strip_row.add_child(_casino_make_item(pool[randi() % pool.size()]))
 
 
 func _casino_build_strip(final: Dictionary) -> void:
@@ -1737,25 +1746,24 @@ func _casino_build_strip(final: Dictionary) -> void:
 		_casino_strip_row.remove_child(c)
 		c.free()
 	_casino_strip_row.position.x = 0.0
-	var fin_idx := _CASINO_REWARDS.size() if final.get("id","") == "giant" else _CASINO_REWARDS.find(final)
+	var pool: Array = _CASINO_POOLS[_casino_tier]
 	for i in _CASINO_TOTAL:
 		if i == _CASINO_FIN_IDX:
-			_casino_strip_row.add_child(_casino_make_item(final, fin_idx))
+			_casino_strip_row.add_child(_casino_make_item(final))
 		else:
-			var ri := randi() % _CASINO_REWARDS.size()
-			_casino_strip_row.add_child(_casino_make_item(_CASINO_REWARDS[ri], ri))
+			_casino_strip_row.add_child(_casino_make_item(pool[randi() % pool.size()]))
 
 
-func _casino_make_item(r: Dictionary, r_idx: int) -> Control:
-	var bg_col:  Color = _CASINO_BG[r_idx]  if r_idx >= 0 else Color(0.2, 0.2, 0.2)
-	var txt_col: Color = _CASINO_TXT[r_idx] if r_idx >= 0 else Color.WHITE
+func _casino_make_item(r: Dictionary) -> Control:
+	var id: String = r.get("id", "")
+	var bg_col:  Color = _CASINO_BG.get(id, Color(0.38, 0.30, 0.05))
+	var txt_col: Color = _CASINO_TXT.get(id, Color(0.95, 0.85, 0.30))
 	var brd_col := Color(0.30, 0.28, 0.25)
-	var brd_w   := 1
 
 	var c := PanelContainer.new()
 	c.custom_minimum_size = Vector2(_CASINO_ITEM_W, _CASINO_ITEM_H)
 	c.add_theme_stylebox_override(&"panel",
-		UiStyle.panel_style(bg_col, brd_col, 4, brd_w))
+		UiStyle.panel_style(bg_col, brd_col, 4, 1))
 
 	var lbl := Label.new()
 	lbl.text                  = r["label"]
@@ -1795,15 +1803,34 @@ func _casino_finish(reward: Dictionary) -> void:
 func _casino_grant(reward: Dictionary) -> void:
 	match reward.get("id", ""):
 		"coin1":        GameState.add_coins(1)
+		"coin3":        GameState.add_coins(3)
 		"coin5":        GameState.add_coins(5)
+		"coin8":        GameState.add_coins(8)
 		"coin10":       GameState.add_coins(10)
+		"coin15":       GameState.add_coins(15)
 		"coin20":       GameState.add_coins(20)
-		"ore200":       GameState.add_ore(200)
-		"wood200":      GameState.add_wood(200)
+		"coin35":       GameState.add_coins(35)
+		"coin50":       GameState.add_coins(50)
 		"coin100":      GameState.add_coins(100)
+		"ore100":       GameState.add_ore(100)
+		"ore200":       GameState.add_ore(200)
+		"wood50":       GameState.add_wood(50)
+		"wood100":      GameState.add_wood(100)
+		"wood200":      GameState.add_wood(200)
+		"free_knight":  _casino_spawn_free_knight()
 		"giant":        _casino_try_spawn_giant()
 		"enemy_attack": _casino_spawn_enemy_attack()
 		# "empty": nothing
+
+
+func _casino_spawn_free_knight() -> void:
+	var k := _WarriorScene.instantiate() as CharacterBody3D
+	k.set_script(_AttackKnightScript)
+	add_child(k)
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		_gw_place_m2(k)
+	else:
+		k.global_position = Vector3(7.0, 0.55, 22.0)
 
 
 func _casino_spawn_enemy_attack() -> void:
