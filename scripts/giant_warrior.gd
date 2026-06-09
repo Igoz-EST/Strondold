@@ -122,7 +122,7 @@ func _gw_death_fall() -> void:
 
 # ─── Enemy search ─────────────────────────────────────────────────────────────
 
-const GIANT_VISION := 63.0
+const GIANT_VISION := 14.0
 
 func _pick_enemy() -> Node3D:
 	# Engage ANY enemy within reach

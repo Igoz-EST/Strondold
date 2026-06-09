@@ -15,7 +15,7 @@ const _W_ANIM_ATTACK := ["Knight 01|Stab", "Knight 01|RaiseShield", "Attack", "S
 
 const GRAVITY := 30.0
 ## Как у башни (`tower_unit.FIRE_RANGE`).
-const VISION_RANGE := 42.0
+const VISION_RANGE := 14.0
 const ATTACK_RANGE := 7.5
 const ATTACK_INTERVAL := 0.85
 ## Урон как у обычного врага по базе.
