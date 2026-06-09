@@ -1977,13 +1977,17 @@ func _refresh_building_panel() -> void:
 		_bld_magic_btn.visible = false
 
 	if is_tower:
+		var is_skywatch := _bld_selected.is_in_group(&"skywatch_tower")
 		var t_type := int(_bld_selected.get(&"tower_type") if _bld_selected.get(&"tower_type") != null else 0)
 		var type_str := "Magic" if t_type == 1 else "Physical"
-		_bld_title_lbl.text = "Tower  L%d  (%s)" % [lvl, type_str]
+		_bld_title_lbl.text = ("Skywatch" if is_skywatch else "Tower  L%d  (%s)" % [lvl, type_str])
 		if _bld_flag_btn != null:
 			_bld_flag_btn.visible = false
 
-		if t_type == 0:  # physical path
+		if is_skywatch:
+			_bld_upgrade_btn.text     = "⬆ No upgrades available"
+			_bld_upgrade_btn.disabled = true
+		elif t_type == 0:  # physical path
 			if lvl >= 3:
 				_bld_upgrade_btn.text     = "⬆ Max Level (Physical)"
 				_bld_upgrade_btn.disabled = true
