@@ -15,7 +15,7 @@ const WAREHOUSE_WOOD_COST := 60
 const SKYWATCH_ORE_COST  := 200
 const SKYWATCH_WOOD_COST := 20
 const MARKET_ORE_COST    := 250
-const MARKET_WOOD_COST   := 200
+const MARKET_WOOD_COST   := 80
 
 const BUILD_NONE     := -1
 const BUILD_TOWER    := 0
@@ -27,10 +27,10 @@ const DMG_UPGRADE_COST := 5
 const DMG_UPGRADE_AMOUNT := 10
 const ATTACK_KNIGHT_COIN_COST := 2
 const ATTACK_GIANT_COIN_COST  := 100
-const ORE_PER_COIN := 100
+const ORE_PER_COIN := 50
 const WORKER_COST := 5
 const BUILDING_UPGRADE_COIN_COSTS: Array[int] = [0, 20, 30]
-const BUILDING_UPGRADE_ORE_COSTS: Array[int] = [0, 500, 1000]
+const BUILDING_UPGRADE_ORE_COSTS: Array[int] = [0, 300, 700]
 ## Market upgrade costs include wood, unlike the generic tower/barracks costs above.
 const MARKET_UPGRADE_COIN_COSTS: Array[int] = [0, 40, 60]
 const MARKET_UPGRADE_WOOD_COSTS: Array[int] = [0, 100, 200]
@@ -48,7 +48,7 @@ const BUILD_MINE_CLEAR_RADIUS := 12.0
 
 var coins: int = 10
 var ore: int = 250
-var wood: int = 50
+var wood: int = 80
 ## Добавка к урону меча только по деревьям/камням (группа breakable). По врагам — фиксированный урон в player.gd.
 var player_sword_damage_bonus: int = 0
 var tower_level: int = 1
@@ -132,7 +132,7 @@ func reset_run() -> void:
 	game_over = false
 	coins = 10
 	ore = 250
-	wood = 50
+	wood = 80
 	player_sword_damage_bonus = 0
 	tower_level = 1
 	barracks_level = 1
