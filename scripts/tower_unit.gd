@@ -1,5 +1,8 @@
 extends StaticBody3D
 
+const TOWER_TYPE_PHYS  := 0
+const TOWER_TYPE_MAGIC := 1
+
 const BASE_FIRE_RANGE := 28.0
 const BASE_FIRE_INTERVAL := 1.05
 const BASE_PROJECTILE_DAMAGE := 14
@@ -7,6 +10,8 @@ const SPLASH_RADIUS := 5.5
 
 const _ProjectileScript := preload("res://scripts/tower_projectile.gd")
 
+var tower_type: int = TOWER_TYPE_PHYS
+var damage_type: int = 0  # 0 = PHYSICAL, 1 = MAGIC
 var _fire_cd: float = 0.0
 var fire_range := BASE_FIRE_RANGE
 var fire_interval := BASE_FIRE_INTERVAL
@@ -18,28 +23,77 @@ var upgrade_level := 1
 
 func _ready() -> void:
 	add_to_group(&"tower")
-	apply_upgrade_level(int(get_meta(&"tower_level", 1)))
+	var saved_type  := int(get_meta(&"tower_type",  TOWER_TYPE_PHYS))
+	var saved_level := int(get_meta(&"tower_level", 1))
+	_apply_state(saved_type, saved_level)
 	_fire_cd = randf_range(0.0, fire_interval * 0.6)
 
 
+# Keep for backward compatibility (barracks warriors, etc. call this via _apply_level_to_group)
 func apply_upgrade_level(level: int) -> void:
+	_apply_state(TOWER_TYPE_PHYS, level)
+
+
+func upgrade_phys() -> void:
+	if tower_type != TOWER_TYPE_PHYS or upgrade_level >= 3:
+		return
+	_apply_state(TOWER_TYPE_PHYS, upgrade_level + 1)
+
+
+func convert_to_magic() -> void:
+	if tower_type != TOWER_TYPE_PHYS or upgrade_level != 1:
+		return
+	_apply_state(TOWER_TYPE_MAGIC, 1)
+
+
+func upgrade_magic() -> void:
+	if tower_type != TOWER_TYPE_MAGIC or upgrade_level >= 3:
+		return
+	_apply_state(TOWER_TYPE_MAGIC, upgrade_level + 1)
+
+
+func _apply_state(t_type: int, level: int) -> void:
+	tower_type    = t_type
 	upgrade_level = clampi(level, 1, 3)
+	set_meta(&"tower_type",  tower_type)
 	set_meta(&"tower_level", upgrade_level)
 	fire_range = BASE_FIRE_RANGE
-	fire_interval = BASE_FIRE_INTERVAL
-	var multiplier := 1.0
-	var splash_fraction := 0.0
-	if upgrade_level == 2:
-		multiplier = 1.25
-		splash_fraction = 0.25
-	elif upgrade_level == 3:
-		multiplier = 1.75
-		splash_fraction = 0.5
-	projectile_damage = maxi(1, int(round(float(BASE_PROJECTILE_DAMAGE) * multiplier)))
-	splash_damage = int(round(float(projectile_damage) * splash_fraction))
-	splash_radius = SPLASH_RADIUS if splash_damage > 0 else 0.0
+
+	if tower_type == TOWER_TYPE_PHYS:
+		damage_type  = 0
+		splash_damage = 0
+		splash_radius = 0.0
+		match upgrade_level:
+			1:
+				projectile_damage = BASE_PROJECTILE_DAMAGE
+				fire_interval     = 1.05
+			2:
+				projectile_damage = roundi(float(BASE_PROJECTILE_DAMAGE) * 1.25)  # 18
+				fire_interval     = 0.85
+				splash_damage     = roundi(float(projectile_damage) * 0.25)
+				splash_radius     = SPLASH_RADIUS
+			3:
+				projectile_damage = roundi(float(BASE_PROJECTILE_DAMAGE) * 1.75)  # 25
+				fire_interval     = 0.70
+				splash_damage     = roundi(float(projectile_damage) * 0.50)
+				splash_radius     = SPLASH_RADIUS
+	else:  # MAGIC
+		damage_type   = 1
+		splash_damage = 0
+		splash_radius = 0.0
+		match upgrade_level:
+			1:
+				projectile_damage = 11
+				fire_interval     = 1.05
+			2:
+				projectile_damage = 15
+				fire_interval     = 0.85
+			3:
+				projectile_damage = 22
+				fire_interval     = 0.70
+
 	var factory := load("res://scripts/tower_scene.gd")
-	factory.add_level_visuals(self, upgrade_level)
+	factory.add_level_visuals(self, upgrade_level, tower_type == TOWER_TYPE_MAGIC)
 
 
 func _physics_process(delta: float) -> void:
@@ -94,10 +148,16 @@ func _launch_at(target: Node3D) -> void:
 	sm.height = 0.56
 	mesh.mesh = sm
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(1.0, 0.88, 0.25)
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.55, 0.08)
-	mat.emission_energy_multiplier = 1.1
+	if tower_type == TOWER_TYPE_MAGIC:
+		mat.albedo_color = Color(0.75, 0.10, 1.00)
+		mat.emission_enabled = true
+		mat.emission = Color(0.55, 0.00, 0.90)
+		mat.emission_energy_multiplier = 1.4
+	else:
+		mat.albedo_color = Color(1.0, 0.88, 0.25)
+		mat.emission_enabled = true
+		mat.emission = Color(1.0, 0.55, 0.08)
+		mat.emission_energy_multiplier = 1.1
 	mat.roughness = 0.35
 	mesh.set_surface_override_material(0, mat)
 	prj.add_child(mesh)
@@ -105,4 +165,4 @@ func _launch_at(target: Node3D) -> void:
 	prj.set_script(_ProjectileScript)
 	world.add_child(prj)
 	if prj.has_method(&"setup"):
-		prj.call(&"setup", muzzle, target, projectile_damage, splash_damage, splash_radius)
+		prj.call(&"setup", muzzle, target, projectile_damage, splash_damage, splash_radius, damage_type)

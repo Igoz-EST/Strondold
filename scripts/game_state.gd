@@ -31,6 +31,13 @@ const ORE_PER_COIN := 50
 const WORKER_COST := 5
 const BUILDING_UPGRADE_COIN_COSTS: Array[int] = [0, 20, 30]
 const BUILDING_UPGRADE_ORE_COSTS: Array[int] = [0, 300, 700]
+# Per-tower upgrade costs (index = current level, i.e. cost to go level→level+1)
+const TOWER_PHYS_COIN_COSTS: Array[int] = [0, 20, 30]
+const TOWER_PHYS_ORE_COSTS:  Array[int] = [0, 300, 700]
+const TOWER_CONV_COIN := 20
+const TOWER_CONV_ORE  := 150
+const TOWER_MAGIC_COIN_COSTS: Array[int] = [0, 25, 35]
+const TOWER_MAGIC_ORE_COSTS:  Array[int] = [0, 400, 800]
 ## Market upgrade costs include wood, unlike the generic tower/barracks costs above.
 const MARKET_UPGRADE_COIN_COSTS: Array[int] = [0, 40, 60]
 const MARKET_UPGRADE_WOOD_COSTS: Array[int] = [0, 100, 200]
@@ -236,18 +243,6 @@ func buy_dmg_upgrade() -> bool:
 	return true
 
 
-func get_tower_upgrade_cost() -> int:
-	if tower_level >= 3:
-		return 0
-	return BUILDING_UPGRADE_COIN_COSTS[tower_level]
-
-
-func get_tower_upgrade_ore_cost() -> int:
-	if tower_level >= 3:
-		return 0
-	return BUILDING_UPGRADE_ORE_COSTS[tower_level]
-
-
 func get_barracks_upgrade_cost() -> int:
 	if barracks_level >= 3:
 		return 0
@@ -260,19 +255,64 @@ func get_barracks_upgrade_ore_cost() -> int:
 	return BUILDING_UPGRADE_ORE_COSTS[barracks_level]
 
 
-func buy_tower_upgrade() -> bool:
-	if tower_level >= 3:
-		return false
-	var cost := get_tower_upgrade_cost()
-	var ore_cost := get_tower_upgrade_ore_cost()
-	if ore < ore_cost:
-		return false
-	if not spend_coins(cost):
-		return false
-	ore -= ore_cost
-	ore_changed.emit(ore)
-	tower_level += 1
-	_apply_level_to_group(&"tower", tower_level)
+func can_afford_tower_phys_upgrade(tower: Node3D) -> bool:
+	if not is_instance_valid(tower): return false
+	var lvl := int(tower.get(&"upgrade_level") if tower.get(&"upgrade_level") != null else 1)
+	var t   := int(tower.get(&"tower_type")    if tower.get(&"tower_type")    != null else 0)
+	if t != 0 or lvl >= 3: return false
+	if infinite_resources: return true
+	return coins >= TOWER_PHYS_COIN_COSTS[lvl] and ore >= TOWER_PHYS_ORE_COSTS[lvl]
+
+
+func can_afford_tower_convert(tower: Node3D) -> bool:
+	if not is_instance_valid(tower): return false
+	var lvl := int(tower.get(&"upgrade_level") if tower.get(&"upgrade_level") != null else 1)
+	var t   := int(tower.get(&"tower_type")    if tower.get(&"tower_type")    != null else 0)
+	if t != 0 or lvl != 1: return false
+	if infinite_resources: return true
+	return coins >= TOWER_CONV_COIN and ore >= TOWER_CONV_ORE
+
+
+func can_afford_tower_magic_upgrade(tower: Node3D) -> bool:
+	if not is_instance_valid(tower): return false
+	var lvl := int(tower.get(&"upgrade_level") if tower.get(&"upgrade_level") != null else 1)
+	var t   := int(tower.get(&"tower_type")    if tower.get(&"tower_type")    != null else 0)
+	if t != 1 or lvl >= 3: return false
+	if infinite_resources: return true
+	return coins >= TOWER_MAGIC_COIN_COSTS[lvl] and ore >= TOWER_MAGIC_ORE_COSTS[lvl]
+
+
+func buy_tower_phys_upgrade(tower: Node3D) -> bool:
+	if not can_afford_tower_phys_upgrade(tower): return false
+	var lvl := int(tower.get(&"upgrade_level") if tower.get(&"upgrade_level") != null else 1)
+	spend_coins(TOWER_PHYS_COIN_COSTS[lvl])
+	if not infinite_resources:
+		ore -= TOWER_PHYS_ORE_COSTS[lvl]
+		ore_changed.emit(ore)
+	tower.call(&"upgrade_phys")
+	building_levels_changed.emit()
+	return true
+
+
+func buy_tower_convert_to_magic(tower: Node3D) -> bool:
+	if not can_afford_tower_convert(tower): return false
+	spend_coins(TOWER_CONV_COIN)
+	if not infinite_resources:
+		ore -= TOWER_CONV_ORE
+		ore_changed.emit(ore)
+	tower.call(&"convert_to_magic")
+	building_levels_changed.emit()
+	return true
+
+
+func buy_tower_magic_upgrade(tower: Node3D) -> bool:
+	if not can_afford_tower_magic_upgrade(tower): return false
+	var lvl := int(tower.get(&"upgrade_level") if tower.get(&"upgrade_level") != null else 1)
+	spend_coins(TOWER_MAGIC_COIN_COSTS[lvl])
+	if not infinite_resources:
+		ore -= TOWER_MAGIC_ORE_COSTS[lvl]
+		ore_changed.emit(ore)
+	tower.call(&"upgrade_magic")
 	building_levels_changed.emit()
 	return true
 
@@ -454,7 +494,7 @@ func try_place_tower(world_pos: Vector3) -> bool:
 		cancel_tower_blueprint()
 		return false
 	if build_type == BUILD_TOWER:
-		var tower := _TowerFactory.create_tower(tower_level)
+		var tower := _TowerFactory.create_tower(1)
 		world.add_child(tower)
 		tower.global_position = p
 	elif build_type == BUILD_BARRACKS:

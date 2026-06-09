@@ -751,7 +751,7 @@ func _create_build_preview(build_type: int) -> void:
 	_clear_build_preview()
 	match build_type:
 		GameState.BUILD_TOWER:
-			_build_preview = _TowerFactory.create_tower(GameState.tower_level)
+			_build_preview = _TowerFactory.create_tower(1)
 		GameState.BUILD_BARRACKS:
 			_build_preview = _BarracksFactory.create_barracks(GameState.barracks_level)
 		GameState.BUILD_WAREHOUSE:

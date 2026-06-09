@@ -124,6 +124,7 @@ var _bld_selected:         Node3D = null
 var _bld_title_lbl:        Label
 var _bld_upgrade_btn:      Button
 var _bld_flag_btn:         Button
+var _bld_magic_btn:        Button
 var _selection_ring:       Node3D = null
 var _wood_label: Label
 var _market_buttons: Array[Button] = []
@@ -1894,6 +1895,14 @@ func _setup_building_panel() -> void:
 	_bld_upgrade_btn.pressed.connect(_on_bld_upgrade_pressed)
 	col.add_child(_bld_upgrade_btn)
 
+	_bld_magic_btn = Button.new()
+	_bld_magic_btn.focus_mode = Control.FOCUS_NONE
+	_bld_magic_btn.custom_minimum_size = Vector2(230, 44)
+	UiStyle.style_button(_bld_magic_btn, 14)
+	_bld_magic_btn.visible = false
+	_bld_magic_btn.pressed.connect(_on_bld_magic_btn_pressed)
+	col.add_child(_bld_magic_btn)
+
 	_bld_flag_btn = Button.new()
 	_bld_flag_btn.text = "🚩 Set Rally Flag"
 	_bld_flag_btn.focus_mode = Control.FOCUS_NONE
@@ -1960,33 +1969,66 @@ func _refresh_building_panel() -> void:
 	if _bld_panel_layer == null or not _bld_panel_layer.visible: return
 	if not is_instance_valid(_bld_selected): _close_building_panel(); return
 
-	var lvl: int = int(_bld_selected.get(&"upgrade_level") if _bld_selected.get(&"upgrade_level") != null else 1)
+	var lvl: int   = int(_bld_selected.get(&"upgrade_level") if _bld_selected.get(&"upgrade_level") != null else 1)
 	var is_tower   := _bld_selected.is_in_group(&"tower")
 	var is_market  := _bld_selected.is_in_group(&"market_building")
-	var type_str   := "Tower" if is_tower else ("Market" if is_market else "Barracks")
-	_bld_title_lbl.text = "%s  (Level %d / 3)" % [type_str, lvl]
-	if _bld_flag_btn != null:
-		_bld_flag_btn.visible = not is_tower and not is_market  # Flag only for Barracks
-		if _bld_flag_btn.visible:
-			var placing := GameState.flag_placement_mode and \
-				GameState.flag_placement_barracks == _bld_selected
-			_bld_flag_btn.text     = "🚩 Placing… (click to set)" if placing else "🚩 Set Rally Flag"
-			_bld_flag_btn.disabled = placing
 
-	if lvl >= 3:
-		_bld_upgrade_btn.text     = "⬆ Max Level"
-		_bld_upgrade_btn.disabled = true
-	elif is_market:
-		var mc := GameState.MARKET_UPGRADE_COIN_COSTS[lvl]
-		var mw := GameState.MARKET_UPGRADE_WOOD_COSTS[lvl]
-		var mo := GameState.MARKET_UPGRADE_ORE_COSTS[lvl]
-		_bld_upgrade_btn.text     = "⬆ Lv%d → Lv%d  (%dc / %dw / %do)" % [lvl, lvl+1, mc, mw, mo]
-		_bld_upgrade_btn.disabled = not GameState.can_afford_building_upgrade(_bld_selected)
+	if _bld_magic_btn != null:
+		_bld_magic_btn.visible = false
+
+	if is_tower:
+		var t_type := int(_bld_selected.get(&"tower_type") if _bld_selected.get(&"tower_type") != null else 0)
+		var type_str := "Magic" if t_type == 1 else "Physical"
+		_bld_title_lbl.text = "Tower  L%d  (%s)" % [lvl, type_str]
+		if _bld_flag_btn != null:
+			_bld_flag_btn.visible = false
+
+		if t_type == 0:  # physical path
+			if lvl >= 3:
+				_bld_upgrade_btn.text     = "⬆ Max Level (Physical)"
+				_bld_upgrade_btn.disabled = true
+			else:
+				var cc := GameState.TOWER_PHYS_COIN_COSTS[lvl]
+				var oc := GameState.TOWER_PHYS_ORE_COSTS[lvl]
+				_bld_upgrade_btn.text     = "⬆ Phys L%d → L%d  (%dc / %do)" % [lvl, lvl+1, cc, oc]
+				_bld_upgrade_btn.disabled = not GameState.can_afford_tower_phys_upgrade(_bld_selected)
+			if lvl == 1 and _bld_magic_btn != null:
+				_bld_magic_btn.visible   = true
+				_bld_magic_btn.text      = "✨ → Magic L1  (%dc / %do)" % [GameState.TOWER_CONV_COIN, GameState.TOWER_CONV_ORE]
+				_bld_magic_btn.disabled  = not GameState.can_afford_tower_convert(_bld_selected)
+		else:  # magic path
+			if lvl >= 3:
+				_bld_upgrade_btn.text     = "✨ Max Level (Magic)"
+				_bld_upgrade_btn.disabled = true
+			else:
+				var cc := GameState.TOWER_MAGIC_COIN_COSTS[lvl]
+				var oc := GameState.TOWER_MAGIC_ORE_COSTS[lvl]
+				_bld_upgrade_btn.text     = "✨ Magic L%d → L%d  (%dc / %do)" % [lvl, lvl+1, cc, oc]
+				_bld_upgrade_btn.disabled = not GameState.can_afford_tower_magic_upgrade(_bld_selected)
 	else:
-		var cc := GameState.BUILDING_UPGRADE_COIN_COSTS[lvl]
-		var oc := GameState.BUILDING_UPGRADE_ORE_COSTS[lvl]
-		_bld_upgrade_btn.text     = "⬆ Lv%d → Lv%d  (%dc / %do)" % [lvl, lvl+1, cc, oc]
-		_bld_upgrade_btn.disabled = not GameState.can_afford_building_upgrade(_bld_selected)
+		var type_str := "Market" if is_market else "Barracks"
+		_bld_title_lbl.text = "%s  (Level %d / 3)" % [type_str, lvl]
+		if _bld_flag_btn != null:
+			_bld_flag_btn.visible = not is_market
+			if _bld_flag_btn.visible:
+				var placing := GameState.flag_placement_mode and \
+					GameState.flag_placement_barracks == _bld_selected
+				_bld_flag_btn.text     = "🚩 Placing… (click to set)" if placing else "🚩 Set Rally Flag"
+				_bld_flag_btn.disabled = placing
+		if lvl >= 3:
+			_bld_upgrade_btn.text     = "⬆ Max Level"
+			_bld_upgrade_btn.disabled = true
+		elif is_market:
+			var mc := GameState.MARKET_UPGRADE_COIN_COSTS[lvl]
+			var mw := GameState.MARKET_UPGRADE_WOOD_COSTS[lvl]
+			var mo := GameState.MARKET_UPGRADE_ORE_COSTS[lvl]
+			_bld_upgrade_btn.text     = "⬆ Lv%d → Lv%d  (%dc / %dw / %do)" % [lvl, lvl+1, mc, mw, mo]
+			_bld_upgrade_btn.disabled = not GameState.can_afford_building_upgrade(_bld_selected)
+		else:
+			var cc := GameState.BUILDING_UPGRADE_COIN_COSTS[lvl]
+			var oc := GameState.BUILDING_UPGRADE_ORE_COSTS[lvl]
+			_bld_upgrade_btn.text     = "⬆ Lv%d → Lv%d  (%dc / %do)" % [lvl, lvl+1, cc, oc]
+			_bld_upgrade_btn.disabled = not GameState.can_afford_building_upgrade(_bld_selected)
 
 
 func _create_selection_ring() -> void:
@@ -2029,7 +2071,20 @@ func _hide_selection_ring() -> void:
 
 func _on_bld_upgrade_pressed() -> void:
 	if not is_instance_valid(_bld_selected): return
-	GameState.buy_building_upgrade(_bld_selected)
+	if _bld_selected.is_in_group(&"tower"):
+		var t_type := int(_bld_selected.get(&"tower_type") if _bld_selected.get(&"tower_type") != null else 0)
+		if t_type == 0:
+			GameState.buy_tower_phys_upgrade(_bld_selected)
+		else:
+			GameState.buy_tower_magic_upgrade(_bld_selected)
+	else:
+		GameState.buy_building_upgrade(_bld_selected)
+	_refresh_building_panel()
+
+
+func _on_bld_magic_btn_pressed() -> void:
+	if not is_instance_valid(_bld_selected): return
+	GameState.buy_tower_convert_to_magic(_bld_selected)
 	_refresh_building_panel()
 
 
