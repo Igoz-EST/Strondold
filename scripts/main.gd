@@ -475,12 +475,31 @@ func _setup_commander_build_ui() -> void:
 	bar.add_theme_stylebox_override(&"panel", UiStyle.panel_style())
 	_build_layer.add_child(bar)
 
+	var outer_col := VBoxContainer.new()
+	outer_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outer_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	bar.add_child(outer_col)
+
+	var queue_strip := HBoxContainer.new()
+	queue_strip.add_theme_constant_override("separation", 6)
+	outer_col.add_child(queue_strip)
+
+	_worker_timer_label = Label.new()
+	_worker_timer_label.text = "No queue"
+	UiStyle.style_label(_worker_timer_label, UiStyle.TEXT_MUTED, 14, 3)
+	queue_strip.add_child(_worker_timer_label)
+
+	_spawn_queue_row = HBoxContainer.new()
+	_spawn_queue_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_spawn_queue_row.add_theme_constant_override("separation", 4)
+	queue_strip.add_child(_spawn_queue_row)
+
 	var tabs := TabContainer.new()
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tabs.mouse_filter = Control.MOUSE_FILTER_STOP
 	tabs.focus_mode = Control.FOCUS_NONE
-	bar.add_child(tabs)
+	outer_col.add_child(tabs)
 
 	var build_tab := MarginContainer.new()
 	build_tab.name = "Defence"
@@ -654,15 +673,6 @@ func _setup_commander_build_ui() -> void:
 	workers_col.add_theme_constant_override("separation", 10)
 	workers_tab.add_child(workers_col)
 
-	_worker_timer_label = Label.new()
-	_worker_timer_label.text = "No queue"
-	UiStyle.style_label(_worker_timer_label, UiStyle.TEXT_MUTED, 16, 3)
-	workers_col.add_child(_worker_timer_label)
-
-	_spawn_queue_row = HBoxContainer.new()
-	_spawn_queue_row.add_theme_constant_override("separation", 4)
-	workers_col.add_child(_spawn_queue_row)
-
 	var worker_buttons_row := HBoxContainer.new()
 	worker_buttons_row.add_theme_constant_override("separation", 10)
 	workers_col.add_child(worker_buttons_row)
@@ -689,7 +699,7 @@ func _setup_commander_build_ui() -> void:
 
 	_build_casino_tab(tabs)
 
-	bar.offset_top = -240.0
+	bar.offset_top = -270.0
 	_setup_building_panel()
 	_on_coins_changed(GameState.coins)
 	_refresh_ore_labels()
