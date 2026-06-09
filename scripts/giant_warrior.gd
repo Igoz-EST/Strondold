@@ -27,6 +27,7 @@ const _SPLASH_PCT    := 0.20   # 20% splash damage
 # ─── State machine ────────────────────────────────────────────────────────────
 enum GWState { MARCH, HOLD, COMBAT }
 var _gw_state: GWState = GWState.MARCH
+var attack_interval: float = ATTACK_INTERVAL
 
 var _gw_model: Node3D         = null
 var _gw_anim:  AnimationPlayer = null
@@ -43,10 +44,11 @@ func _ready() -> void:
 	super._ready()
 	add_to_group(&"giant_warrior")
 	_init_hold_pos()
-	max_hp       = MAX_HP * 10
-	hp           = max_hp
-	melee_damage = MELEE_DAMAGE * 10
-	scale        = Vector3.ONE * 2.0
+	max_hp          = MAX_HP * 15
+	hp              = max_hp
+	melee_damage    = MELEE_DAMAGE * 15
+	attack_interval = 0.70
+	scale           = Vector3.ONE * 2.0
 	if is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
 		_hp_bar.call(&"set_hp", hp, max_hp)
 	_load_knight_model()
@@ -240,7 +242,7 @@ func _do_combat(delta: float) -> void:
 		look_at(tgt.global_position, Vector3.UP)
 		_attack_cd -= delta
 		if _attack_cd <= 0.0 and tgt.has_method(&"apply_sword_hit"):
-			_attack_cd = ATTACK_INTERVAL
+			_attack_cd = attack_interval
 			SoundManager.play_one_shot(SoundManager.KEY_SWORD_SWING, 0.14, -4.0)
 			tgt.call(&"apply_sword_hit", melee_damage, self)
 			_deal_splash_damage(tgt)

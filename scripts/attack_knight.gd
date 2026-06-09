@@ -11,6 +11,7 @@ const _AK_END_PROGRESS := 6.0
 var _ak_state: AKState = AKState.MARCH
 var _ak_path: Path3D = null
 var _ak_path_progress: float = 0.0
+var attack_interval: float = ATTACK_INTERVAL
 
 
 func _ready() -> void:
@@ -98,7 +99,7 @@ func _do_combat(delta: float) -> void:
 		look_at(tgt.global_position, Vector3.UP)
 		_attack_cd -= delta
 		if _attack_cd <= 0.0 and tgt.has_method(&"apply_sword_hit"):
-			_attack_cd = ATTACK_INTERVAL
+			_attack_cd = attack_interval
 			SoundManager.play_one_shot(SoundManager.KEY_SWORD_SWING, 0.14, -4.0)
 			tgt.call(&"apply_sword_hit", melee_damage, self)
 			_w_play(_W_ANIM_ATTACK, false)

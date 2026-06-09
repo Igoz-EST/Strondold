@@ -102,9 +102,12 @@ var _buy_worker_button: Button
 var _buy_woodcutter_button: Button
 var _worker_timer_label: Label
 
-var _worker_spawn_pending := false
-var _worker_spawn_time_left := 0.0
-var _pending_worker_role := "miner"
+const _SPAWN_ICONS: Dictionary = {"miner": "⛏", "woodcutter": "🌲", "knight": "⚔", "giant": "🛡"}
+const _SPAWN_TIMES: Dictionary = {"miner": 5.0, "woodcutter": 5.0, "knight": 3.0, "giant": 30.0}
+
+var _spawn_queue: Array = []
+var _spawn_timer_left: float = 0.0
+var _spawn_queue_row: HBoxContainer
 
 var _casino_bet_slider: HSlider
 var _casino_bet_label:  Label
@@ -404,13 +407,18 @@ func _pick_random_chest_position() -> Vector3:
 
 
 func _process(delta: float) -> void:
-	if _worker_spawn_pending:
-		_worker_spawn_time_left -= delta
-		_refresh_workers_ui()
-		if _worker_spawn_time_left <= 0.0:
-			_worker_spawn_pending = false
-			_spawn_worker(_pending_worker_role)
+	if not _spawn_queue.is_empty():
+		_spawn_timer_left -= delta
+		if _worker_timer_label:
+			var first: Dictionary = _spawn_queue[0]
+			_worker_timer_label.text = "Spawning %s: %.1f s" % [first.get("type", "?"), maxf(_spawn_timer_left, 0.0)]
+		if _spawn_timer_left <= 0.0:
+			var entry: Dictionary = _spawn_queue[0]
+			_spawn_queue.remove_at(0)
+			_do_spawn_entry(entry)
+			_spawn_timer_left = float(_spawn_queue[0].get("time", 5.0)) if not _spawn_queue.is_empty() else 0.0
 			_refresh_workers_ui()
+			_rebuild_spawn_queue_ui()
 	_update_wave_countdown_label()
 	_try_show_victory()
 
@@ -647,9 +655,13 @@ func _setup_commander_build_ui() -> void:
 	workers_tab.add_child(workers_col)
 
 	_worker_timer_label = Label.new()
-	_worker_timer_label.text = "No worker order"
+	_worker_timer_label.text = "No queue"
 	UiStyle.style_label(_worker_timer_label, UiStyle.TEXT_MUTED, 16, 3)
 	workers_col.add_child(_worker_timer_label)
+
+	_spawn_queue_row = HBoxContainer.new()
+	_spawn_queue_row.add_theme_constant_override("separation", 4)
+	workers_col.add_child(_spawn_queue_row)
 
 	var worker_buttons_row := HBoxContainer.new()
 	worker_buttons_row.add_theme_constant_override("separation", 10)
@@ -706,27 +718,11 @@ func _on_skywatch_button_pressed() -> void:
 
 
 func _on_attack_knight_button_pressed() -> void:
-	if not GameState.spend_coins(GameState.ATTACK_KNIGHT_COIN_COST):
-		return
-	var k := _WarriorScene.instantiate() as CharacterBody3D
-	k.set_script(_AttackKnightScript)
-	add_child(k)
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
-		_gw_place_m2(k)
-	else:
-		k.global_position = Vector3(7.0, 0.55, 22.0)
+	_enqueue_spawn("knight", GameState.ATTACK_KNIGHT_COIN_COST)
 
 
 func _on_attack_giant_button_pressed() -> void:
-	if not GameState.spend_coins(GameState.ATTACK_GIANT_COIN_COST):
-		return
-	var gw := _WarriorScene.instantiate() as CharacterBody3D
-	gw.set_script(_AttackGiantScript)
-	add_child(gw)
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
-		_gw_place_m2(gw)
-	else:
-		gw.global_position = Vector3(7.0, 0.55, 22.0)
+	_enqueue_spawn("giant", GameState.ATTACK_GIANT_COIN_COST)
 
 
 func _on_dmg_upgrade_pressed() -> void:
@@ -755,24 +751,11 @@ func _add_market_button(parent: Node, text: String, coin_delta: int, wood_delta:
 
 
 func _on_buy_miner_pressed() -> void:
-	_start_worker_order("miner")
+	_enqueue_spawn("miner", GameState.WORKER_COST)
 
 
 func _on_buy_woodcutter_pressed() -> void:
-	_start_worker_order("woodcutter")
-
-
-func _start_worker_order(role: String) -> void:
-	if _worker_spawn_pending:
-		return
-	if GameState.coins < GameState.WORKER_COST:
-		return
-	if not GameState.spend_coins(GameState.WORKER_COST):
-		return
-	_pending_worker_role = role
-	_worker_spawn_pending = true
-	_worker_spawn_time_left = 5.0
-	_refresh_workers_ui()
+	_enqueue_spawn("woodcutter", GameState.WORKER_COST)
 
 
 func _refresh_workers_ui() -> void:
@@ -781,16 +764,79 @@ func _refresh_workers_ui() -> void:
 	_buy_worker_button.text = "Miner\n%d coins" % GameState.WORKER_COST
 	if _buy_woodcutter_button:
 		_buy_woodcutter_button.text = "Woodcutter\n%d coins" % GameState.WORKER_COST
-	if _worker_spawn_pending:
-		_worker_timer_label.text = "Spawning %s: %.1f s" % [_pending_worker_role, maxf(_worker_spawn_time_left, 0.0)]
-		_buy_worker_button.disabled = true
-		if _buy_woodcutter_button:
-			_buy_woodcutter_button.disabled = true
+	_buy_worker_button.disabled = GameState.coins < GameState.WORKER_COST
+	if _buy_woodcutter_button:
+		_buy_woodcutter_button.disabled = GameState.coins < GameState.WORKER_COST
+	if _spawn_queue.is_empty():
+		_worker_timer_label.text = "No queue"
 	else:
-		_worker_timer_label.text = "No worker order"
-		_buy_worker_button.disabled = GameState.coins < GameState.WORKER_COST
-		if _buy_woodcutter_button:
-			_buy_woodcutter_button.disabled = GameState.coins < GameState.WORKER_COST
+		var first: Dictionary = _spawn_queue[0]
+		_worker_timer_label.text = "Spawning %s: %.1f s" % [first.get("type", "?"), maxf(_spawn_timer_left, 0.0)]
+
+
+func _enqueue_spawn(type: String, cost: int) -> void:
+	if not GameState.spend_coins(cost):
+		return
+	_spawn_queue.append({"type": type, "cost": cost, "time": _SPAWN_TIMES.get(type, 5.0), "icon": _SPAWN_ICONS.get(type, "?")})
+	if _spawn_queue.size() == 1:
+		_spawn_timer_left = float(_spawn_queue[0].get("time", 5.0))
+	_refresh_workers_ui()
+	_rebuild_spawn_queue_ui()
+
+
+func _cancel_queue_entry(idx: int) -> void:
+	if idx < 0 or idx >= _spawn_queue.size():
+		return
+	var entry: Dictionary = _spawn_queue[idx]
+	GameState.add_coins(int(entry.get("cost", 0)))
+	_spawn_queue.remove_at(idx)
+	if idx == 0:
+		_spawn_timer_left = float(_spawn_queue[0].get("time", 5.0)) if not _spawn_queue.is_empty() else 0.0
+	_refresh_workers_ui()
+	_rebuild_spawn_queue_ui()
+
+
+func _rebuild_spawn_queue_ui() -> void:
+	if _spawn_queue_row == null:
+		return
+	for child in _spawn_queue_row.get_children():
+		child.queue_free()
+	for i in _spawn_queue.size():
+		var entry: Dictionary = _spawn_queue[i]
+		var icon := entry.get("icon", "?") as String
+		var btn := Button.new()
+		btn.text = icon
+		btn.custom_minimum_size = Vector2(36, 36)
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.tooltip_text = "Cancel — refunds %d coins" % entry.get("cost", 0)
+		UiStyle.style_button(btn, 13)
+		btn.set_meta(&"orig_icon", icon)
+		btn.mouse_entered.connect(func() -> void: btn.text = "✕")
+		btn.mouse_exited.connect(func() -> void: btn.text = btn.get_meta(&"orig_icon") as String)
+		btn.pressed.connect(_cancel_queue_entry.bind(i))
+		_spawn_queue_row.add_child(btn)
+
+
+func _do_spawn_entry(entry: Dictionary) -> void:
+	match entry.get("type", "") as String:
+		"miner", "woodcutter":
+			_spawn_worker(entry.get("type", "miner") as String)
+		"knight":
+			var k := _WarriorScene.instantiate() as CharacterBody3D
+			k.set_script(_AttackKnightScript)
+			add_child(k)
+			if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+				_gw_place_m2(k)
+			else:
+				k.global_position = Vector3(7.0, 0.55, 22.0)
+		"giant":
+			var gw := _WarriorScene.instantiate() as CharacterBody3D
+			gw.set_script(_AttackGiantScript)
+			add_child(gw)
+			if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+				_gw_place_m2(gw)
+			else:
+				gw.global_position = Vector3(7.0, 0.55, 22.0)
 
 
 func _refresh_upgrade_buttons() -> void:
