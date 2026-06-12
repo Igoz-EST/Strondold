@@ -37,7 +37,8 @@ const BREAKABLE_CLEAR_RADIUS := 4.6
 const _CASINO_POOLS: Array = [
 	# Tier 0 — 1 coin
 	[
-		{"id": "empty",        "label": "Empty",         "weight": 50},
+		{"id": "empty",        "label": "Empty",         "weight": 49.5},
+		{"id": "bld_upgrade",  "label": "BUILDING\nUP!", "weight": 0.5},
 		{"id": "enemy_attack", "label": "ATTACK!",       "weight": 5},
 		{"id": "coin1",        "label": "+1\nCoin",      "weight": 20},
 		{"id": "coin3",        "label": "+3\nCoins",     "weight": 12},
@@ -47,7 +48,8 @@ const _CASINO_POOLS: Array = [
 	],
 	# Tier 1 — 5 coins
 	[
-		{"id": "empty",        "label": "Empty",         "weight": 42},
+		{"id": "empty",        "label": "Empty",         "weight": 40},
+		{"id": "bld_upgrade",  "label": "BUILDING\nUP!", "weight": 2},
 		{"id": "enemy_attack", "label": "ATTACK!",       "weight": 5},
 		{"id": "coin3",        "label": "+3\nCoins",     "weight": 18},
 		{"id": "coin8",        "label": "+8\nCoins",     "weight": 12},
@@ -59,7 +61,8 @@ const _CASINO_POOLS: Array = [
 	],
 	# Tier 2 — 10 coins
 	[
-		{"id": "empty",        "label": "Empty",         "weight": 30},
+		{"id": "empty",        "label": "Empty",         "weight": 25},
+		{"id": "bld_upgrade",  "label": "BUILDING\nUP!", "weight": 5},
 		{"id": "enemy_attack", "label": "ATTACK!",       "weight": 3},
 		{"id": "coin5",        "label": "+5\nCoins",     "weight": 14},
 		{"id": "coin15",       "label": "+15\nCoins",    "weight": 15},
@@ -74,6 +77,7 @@ const _CASINO_POOLS: Array = [
 const _CASINO_TIER_COSTS: Array[int] = [1, 5, 10]
 const _CASINO_BG: Dictionary = {
 	"empty":        Color(0.10, 0.10, 0.10),
+	"bld_upgrade":  Color(0.05, 0.25, 0.10),
 	"enemy_attack": Color(0.30, 0.04, 0.04),
 	"giant":        Color(0.22, 0.00, 0.38),
 	"free_knight":  Color(0.04, 0.16, 0.34),
@@ -85,6 +89,7 @@ const _CASINO_BG: Dictionary = {
 }
 const _CASINO_TXT: Dictionary = {
 	"empty":        Color(0.38, 0.38, 0.38),
+	"bld_upgrade":  Color(0.35, 1.00, 0.55),
 	"enemy_attack": Color(1.00, 0.22, 0.18),
 	"giant":        Color(0.88, 0.45, 1.00),
 	"free_knight":  Color(0.40, 0.90, 1.00),
@@ -114,6 +119,8 @@ var _skywatch_button: Button
 var _barracks_button: Button
 var _warehouse_button: Button
 var _market_building_button: Button
+var _house_button: Button
+var _pop_label: Label
 var _attack_knight_button: Button
 var _attack_giant_button: Button
 var _dmg_upgrade_button: Button
@@ -206,6 +213,7 @@ func _ready() -> void:
 	GameState.coins_changed.connect(_on_coins_changed)
 	GameState.ore_changed.connect(_on_ore_changed)
 	GameState.wood_changed.connect(_on_wood_changed)
+	GameState.population_changed.connect(_on_population_changed)
 	GameState.base_hp_changed.connect(_on_base_hp_changed)
 	GameState.commander_mode_changed.connect(_on_commander_mode)
 	GameState.pending_build_changed.connect(_on_pending_build)
@@ -289,6 +297,12 @@ func _setup_hud_style() -> void:
 	_wood_label.focus_mode = Control.FOCUS_NONE
 	cl.add_child(_wood_label)
 
+	_pop_label = Label.new()
+	_pop_label.name = &"PopulationLabel"
+	_pop_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pop_label.focus_mode = Control.FOCUS_NONE
+	cl.add_child(_pop_label)
+
 	var panel := PanelContainer.new()
 	panel.name = &"TopHudPanel"
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -312,6 +326,10 @@ func _setup_hud_style() -> void:
 	_wood_label.offset_top = 32.0
 	_wood_label.offset_right = 220.0
 	_wood_label.offset_bottom = 56.0
+	_pop_label.offset_left = 240.0
+	_pop_label.offset_top = 32.0
+	_pop_label.offset_right = 400.0
+	_pop_label.offset_bottom = 56.0
 	_base_hp_label.offset_left = 18.0
 	_base_hp_label.offset_top = 56.0
 	_base_hp_label.offset_right = 350.0
@@ -320,6 +338,8 @@ func _setup_hud_style() -> void:
 	UiStyle.style_label(_coin_label, UiStyle.TEXT_COIN, 16, 3)
 	UiStyle.style_label(_ore_label, UiStyle.TEXT_ORE, 16, 3)
 	UiStyle.style_label(_wood_label, Color(0.72, 0.42, 0.16), 16, 3)
+	UiStyle.style_label(_pop_label, Color(0.55, 0.85, 0.55), 16, 3)
+	_pop_label.text = "Pop: %d/%d" % [GameState.population, GameState.population_max]
 	UiStyle.style_label(_base_hp_label, UiStyle.TEXT_HP, 15, 3)
 
 
@@ -484,6 +504,7 @@ func _spawn_worker(role: String = "miner") -> void:
 	var inst: Node = _WorkerScene.instantiate()
 	if inst.has_method(&"setup"):
 		inst.call(&"setup", _ore_deposit.global_position, role)
+	GameState.register_population_unit(inst)
 	add_child(inst)
 	inst.global_position = _worker_spawn.global_position
 
@@ -602,6 +623,16 @@ func _setup_commander_build_ui() -> void:
 	_market_building_button.tooltip_text = "Passively generates coins over time. Upgradeable to Lv3 for faster income."
 	_market_building_button.pressed.connect(_on_market_building_button_pressed)
 	row_buildings.add_child(_market_building_button)
+
+	_house_button = Button.new()
+	_house_button.focus_mode = Control.FOCUS_NONE
+	_house_button.custom_minimum_size = Vector2(118, 96)
+	_house_button.text = "HOUSE\n🏠\n%d coins\n%d wood" % [GameState.HOUSE_COIN_COST, GameState.HOUSE_WOOD_COST]
+	_house_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_house_button, 13)
+	_house_button.tooltip_text = "+%d max population. No upgrades. Max %d houses." % [GameState.HOUSE_POPULATION_BONUS, GameState.MAX_HOUSES]
+	_house_button.pressed.connect(_on_house_button_pressed)
+	row_buildings.add_child(_house_button)
 
 	var attack_tab := MarginContainer.new()
 	attack_tab.name = "Attack"
@@ -752,6 +783,10 @@ func _on_market_building_button_pressed() -> void:
 	GameState.begin_market_blueprint()
 
 
+func _on_house_button_pressed() -> void:
+	GameState.begin_house_blueprint()
+
+
 func _on_skywatch_button_pressed() -> void:
 	GameState.begin_skywatch_blueprint()
 
@@ -803,9 +838,10 @@ func _refresh_workers_ui() -> void:
 	_buy_worker_button.text = "Miner\n%d coins" % GameState.WORKER_COST
 	if _buy_woodcutter_button:
 		_buy_woodcutter_button.text = "Woodcutter\n%d coins" % GameState.WORKER_COST
-	_buy_worker_button.disabled = GameState.coins < GameState.WORKER_COST
+	var no_room := not GameState.has_population_room()
+	_buy_worker_button.disabled = GameState.coins < GameState.WORKER_COST or no_room
 	if _buy_woodcutter_button:
-		_buy_woodcutter_button.disabled = GameState.coins < GameState.WORKER_COST
+		_buy_woodcutter_button.disabled = GameState.coins < GameState.WORKER_COST or no_room
 	if _spawn_queue.is_empty():
 		_worker_timer_label.text = "No queue"
 	else:
@@ -814,7 +850,11 @@ func _refresh_workers_ui() -> void:
 
 
 func _enqueue_spawn(type: String, cost: int) -> void:
+	# Все прямые покупки NPC занимают слот населения ещё в очереди
+	if not GameState.reserve_population():
+		return
 	if not GameState.spend_coins(cost):
+		GameState.release_population()
 		return
 	_spawn_queue.append({"type": type, "cost": cost, "time": _SPAWN_TIMES.get(type, 5.0), "icon": _SPAWN_ICONS.get(type, "?")})
 	if _spawn_queue.size() == 1:
@@ -828,6 +868,7 @@ func _cancel_queue_entry(idx: int) -> void:
 		return
 	var entry: Dictionary = _spawn_queue[idx]
 	GameState.add_coins(int(entry.get("cost", 0)))
+	GameState.release_population()
 	_spawn_queue.remove_at(idx)
 	if idx == 0:
 		_spawn_timer_left = float(_spawn_queue[0].get("time", 5.0)) if not _spawn_queue.is_empty() else 0.0
@@ -863,6 +904,7 @@ func _do_spawn_entry(entry: Dictionary) -> void:
 		"knight":
 			var k := _WarriorScene.instantiate() as CharacterBody3D
 			k.set_script(_AttackKnightScript)
+			GameState.register_population_unit(k)
 			add_child(k)
 			if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
 				_gw_place_m2(k)
@@ -871,6 +913,7 @@ func _do_spawn_entry(entry: Dictionary) -> void:
 		"giant":
 			var gw := _WarriorScene.instantiate() as CharacterBody3D
 			gw.set_script(_AttackGiantScript)
+			GameState.register_population_unit(gw)
 			add_child(gw)
 			if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
 				_gw_place_m2(gw)
@@ -908,6 +951,12 @@ func _refresh_build_buttons() -> void:
 		_skywatch_button.disabled  = not GameState.can_afford_build(GameState.BUILD_SKYWATCH)
 	if _market_building_button:
 		_market_building_button.disabled = not GameState.can_afford_build(GameState.BUILD_MARKET)
+	if _house_button:
+		_house_button.disabled = not GameState.can_build_house()
+		if GameState.get_house_count() >= GameState.MAX_HOUSES:
+			_house_button.text = "HOUSE\n🏠\nMAX (%d)" % GameState.MAX_HOUSES
+		else:
+			_house_button.text = "HOUSE\n🏠\n%d coins\n%d wood" % [GameState.HOUSE_COIN_COST, GameState.HOUSE_WOOD_COST]
 
 
 func _refresh_ore_labels() -> void:
@@ -930,6 +979,21 @@ func _on_wood_changed(_total: int) -> void:
 	_refresh_ore_labels()
 
 
+func _on_population_changed(current: int, maximum: int) -> void:
+	if _pop_label:
+		_pop_label.text = "Pop: %d/%d" % [current, maximum]
+	_refresh_workers_ui()
+	_refresh_attack_buttons()
+
+
+func _refresh_attack_buttons() -> void:
+	var room := GameState.has_population_room()
+	if _attack_knight_button:
+		_attack_knight_button.disabled = GameState.coins < GameState.ATTACK_KNIGHT_COIN_COST or not room
+	if _attack_giant_button:
+		_attack_giant_button.disabled = GameState.coins < GameState.ATTACK_GIANT_COIN_COST or not room
+
+
 func _on_base_hp_changed(current: int, maximum: int) -> void:
 	_base_hp_label.text = "Base: %d / %d" % [current, maximum]
 
@@ -938,10 +1002,7 @@ func _on_coins_changed(total: int) -> void:
 	_coin_label.text = "Coins: %d" % total
 	if _dmg_upgrade_button:
 		_dmg_upgrade_button.disabled = total < GameState.DMG_UPGRADE_COST
-	if _attack_knight_button:
-		_attack_knight_button.disabled = total < GameState.ATTACK_KNIGHT_COIN_COST
-	if _attack_giant_button:
-		_attack_giant_button.disabled = total < GameState.ATTACK_GIANT_COIN_COST
+	_refresh_attack_buttons()
 	_refresh_build_buttons()
 	_refresh_upgrade_buttons()
 	_refresh_workers_ui()
@@ -964,7 +1025,7 @@ func _on_pending_build(pending: bool) -> void:
 	var gold := Color(1.0, 0.92, 0.45)
 	var white := Color.WHITE
 	if not pending:
-		for btn in [_tower_button, _barracks_button, _warehouse_button, _skywatch_button, _market_building_button]:
+		for btn in [_tower_button, _barracks_button, _warehouse_button, _skywatch_button, _market_building_button, _house_button]:
 			if btn: btn.modulate = white
 		return
 	var bt := GameState.awaiting_build_type
@@ -973,6 +1034,7 @@ func _on_pending_build(pending: bool) -> void:
 	if _warehouse_button:_warehouse_button.modulate= gold if bt == GameState.BUILD_WAREHOUSE else white
 	if _skywatch_button: _skywatch_button.modulate = gold if bt == GameState.BUILD_SKYWATCH  else white
 	if _market_building_button: _market_building_button.modulate = gold if bt == GameState.BUILD_MARKET else white
+	if _house_button: _house_button.modulate = gold if bt == GameState.BUILD_HOUSE else white
 
 
 func _setup_game_over_ui() -> void:
@@ -1797,6 +1859,7 @@ func _casino_finish(reward: Dictionary) -> void:
 	match reward.get("id", ""):
 		"empty":        _casino_result_lbl.text = "No Reward."
 		"enemy_attack": _casino_result_lbl.text = "INCOMING ATTACK!"
+		"bld_upgrade":  pass  # текст ставит _casino_grant_building_upgrade
 		_:              _casino_result_lbl.text = "Won: %s!" % (reward["label"] as String).replace("\n", " ")
 	_casino_update_ui()
 
@@ -1821,7 +1884,16 @@ func _casino_grant(reward: Dictionary) -> void:
 		"free_knight":  _casino_spawn_free_knight()
 		"giant":        _casino_try_spawn_giant()
 		"enemy_attack": _casino_spawn_enemy_attack()
+		"bld_upgrade":  _casino_grant_building_upgrade()
 		# "empty": nothing
+
+
+func _casino_grant_building_upgrade() -> void:
+	if GameState.grant_random_building_upgrade():
+		_casino_result_lbl.text = "Building upgraded!"
+	else:
+		GameState.add_coins(50)
+		_casino_result_lbl.text = "Nothing to upgrade! +50 Coins."
 
 
 func _casino_spawn_free_knight() -> void:

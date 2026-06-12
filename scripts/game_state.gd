@@ -5,6 +5,7 @@ const _BarracksFactory := preload("res://scripts/barracks_scene.gd")
 const _WarehouseFactory := preload("res://scripts/warehouse_scene.gd")
 const _SkywatchFactory  := preload("res://scripts/skywatch_scene.gd")
 const _MarketFactory    := preload("res://scripts/market_scene.gd")
+const _HouseFactory     := preload("res://scripts/house_scene.gd")
 
 const TOWER_ORE_COST     := 200
 const TOWER_WOOD_COST    := 20
@@ -16,6 +17,12 @@ const SKYWATCH_ORE_COST  := 200
 const SKYWATCH_WOOD_COST := 20
 const MARKET_ORE_COST    := 250
 const MARKET_WOOD_COST   := 80
+const HOUSE_WOOD_COST    := 200
+const HOUSE_COIN_COST    := 20
+const MAX_HOUSES         := 5
+
+const BASE_POPULATION_MAX    := 5
+const HOUSE_POPULATION_BONUS := 5
 
 const BUILD_NONE     := -1
 const BUILD_TOWER    := 0
@@ -23,6 +30,7 @@ const BUILD_BARRACKS := 1
 const BUILD_WAREHOUSE := 2
 const BUILD_SKYWATCH  := 3
 const BUILD_MARKET    := 4
+const BUILD_HOUSE     := 5
 const DMG_UPGRADE_COST := 5
 const DMG_UPGRADE_AMOUNT := 10
 const ATTACK_KNIGHT_COIN_COST := 2
@@ -74,7 +82,11 @@ var unbreakable_base:   bool = false
 var flag_placement_mode:     bool    = false
 var flag_placement_barracks: Node3D = null
 var has_market_building: bool = false
+## Население: занятые слоты (живые NPC + очередь спауна) и текущий максимум.
+var population: int = 0
+var population_max: int = BASE_POPULATION_MAX
 
+signal population_changed(current: int, maximum: int)
 signal coins_changed(new_total: int)
 signal ore_changed(new_total: int)
 signal wood_changed(new_total: int)
@@ -153,6 +165,8 @@ func reset_run() -> void:
 	flag_placement_mode      = false
 	flag_placement_barracks  = null
 	has_market_building      = false
+	population               = 0
+	population_max           = BASE_POPULATION_MAX
 	coins_changed.emit(coins)
 	ore_changed.emit(ore)
 	wood_changed.emit(wood)
@@ -161,6 +175,38 @@ func reset_run() -> void:
 	pending_build_changed.emit(false)
 	building_levels_changed.emit()
 	market_building_changed.emit()
+	population_changed.emit(population, population_max)
+
+
+# ─── POPULATION ───────────────────────────────────────────────────────────────
+
+func has_population_room() -> bool:
+	return population < population_max
+
+
+## Занять слот населения (вызывается при покупке NPC, до спауна).
+func reserve_population() -> bool:
+	if population >= population_max:
+		return false
+	population += 1
+	population_changed.emit(population, population_max)
+	return true
+
+
+func release_population() -> void:
+	population = maxi(0, population - 1)
+	population_changed.emit(population, population_max)
+
+
+## Привязать занятый слот к живому NPC: слот освобождается, когда нода
+## покидает дерево (смерть через queue_free и т.п.).
+func register_population_unit(unit: Node) -> void:
+	unit.tree_exiting.connect(release_population)
+
+
+func add_population_max(amount: int) -> void:
+	population_max += amount
+	population_changed.emit(population, population_max)
 
 
 func sell_ore_for_coins() -> void:
@@ -190,7 +236,8 @@ func try_market_trade(coin_delta: int, wood_delta: int, ore_delta: int) -> bool:
 
 func can_afford_build(build_type: int) -> bool:
 	if infinite_resources: return true
-	return ore >= get_build_ore_cost(build_type) and wood >= get_build_wood_cost(build_type)
+	return ore >= get_build_ore_cost(build_type) and wood >= get_build_wood_cost(build_type) \
+		and coins >= get_build_coin_cost(build_type)
 
 
 func get_build_ore_cost(build_type: int) -> int:
@@ -210,6 +257,13 @@ func get_build_wood_cost(build_type: int) -> int:
 		BUILD_WAREHOUSE: return WAREHOUSE_WOOD_COST
 		BUILD_SKYWATCH:  return SKYWATCH_WOOD_COST
 		BUILD_MARKET:    return MARKET_WOOD_COST
+		BUILD_HOUSE:     return HOUSE_WOOD_COST
+	return 0
+
+
+func get_build_coin_cost(build_type: int) -> int:
+	match build_type:
+		BUILD_HOUSE: return HOUSE_COIN_COST
 	return 0
 
 
@@ -218,16 +272,28 @@ func spend_build_resources(build_type: int) -> bool:
 	if not infinite_resources:
 		ore  -= get_build_ore_cost(build_type)
 		wood -= get_build_wood_cost(build_type)
+		coins -= get_build_coin_cost(build_type)
 		ore_changed.emit(ore)
 		wood_changed.emit(wood)
+		coins_changed.emit(coins)
 	return true
 
 
 func refund_build_resources(build_type: int) -> void:
 	ore += get_build_ore_cost(build_type)
 	wood += get_build_wood_cost(build_type)
+	coins += get_build_coin_cost(build_type)
 	ore_changed.emit(ore)
 	wood_changed.emit(wood)
+	coins_changed.emit(coins)
+
+
+func get_house_count() -> int:
+	return get_tree().get_nodes_in_group(&"house").size()
+
+
+func can_build_house() -> bool:
+	return get_house_count() < MAX_HOUSES and can_afford_build(BUILD_HOUSE)
 
 
 func spend_coins(amount: int) -> bool:
@@ -380,6 +446,40 @@ func can_afford_building_upgrade(building: Node3D) -> bool:
 	return coins >= BUILDING_UPGRADE_COIN_COSTS[lvl] and ore >= BUILDING_UPGRADE_ORE_COSTS[lvl]
 
 
+## Казино: бесплатный апгрейд случайного здания со следующим уровнем.
+## false — улучшать нечего (вызывающий выдаёт компенсацию).
+func grant_random_building_upgrade() -> bool:
+	var cands: Array = []
+	for n in get_tree().get_nodes_in_group(&"tower"):
+		if not (n is Node3D) or not is_instance_valid(n): continue
+		if n.is_in_group(&"skywatch_tower"): continue  # скайвотч без уровней
+		if int(n.get(&"upgrade_level")) < 3:
+			cands.append(n)
+	for n in get_tree().get_nodes_in_group(&"market_building"):
+		if n is Node3D and is_instance_valid(n) and int(n.get(&"upgrade_level")) < 3:
+			cands.append(n)
+	# Бараки качаются глобально — один кандидат на все
+	if barracks_level < 3 and not get_tree().get_nodes_in_group(&"barracks").is_empty():
+		cands.append(&"barracks")
+	if cands.is_empty():
+		return false
+	var pick = cands[randi() % cands.size()]
+	if pick is StringName:
+		barracks_level += 1
+		_apply_level_to_group(&"barracks", barracks_level)
+	elif (pick as Node3D).is_in_group(&"market_building"):
+		var b := pick as Node3D
+		b.call(&"apply_upgrade_level", int(b.get(&"upgrade_level")) + 1)
+	else:
+		var t := pick as Node3D
+		if int(t.get(&"tower_type")) == 1:
+			t.call(&"upgrade_magic")
+		else:
+			t.call(&"upgrade_phys")
+	building_levels_changed.emit()
+	return true
+
+
 func _apply_level_to_group(group_name: StringName, level: int) -> void:
 	for n in get_tree().get_nodes_in_group(group_name):
 		if is_instance_valid(n) and n.has_method(&"apply_upgrade_level"):
@@ -436,6 +536,15 @@ func begin_market_blueprint() -> void:
 	if awaiting_build_type != BUILD_NONE:   cancel_tower_blueprint()
 	if not can_afford_build(BUILD_MARKET): return
 	awaiting_build_type = BUILD_MARKET
+	pending_build_changed.emit(true)
+
+
+func begin_house_blueprint() -> void:
+	if not commander_active: return
+	if awaiting_build_type == BUILD_HOUSE: cancel_tower_blueprint(); return
+	if awaiting_build_type != BUILD_NONE:  cancel_tower_blueprint()
+	if not can_build_house(): return
+	awaiting_build_type = BUILD_HOUSE
 	pending_build_changed.emit(true)
 
 
@@ -513,6 +622,15 @@ func try_place_tower(world_pos: Vector3) -> bool:
 		market.global_position = p
 		has_market_building = true
 		market_building_changed.emit()
+	elif build_type == BUILD_HOUSE:
+		if get_house_count() >= MAX_HOUSES:
+			refund_build_resources(build_type)
+			cancel_tower_blueprint()
+			return false
+		var house := _HouseFactory.create_house()
+		world.add_child(house)
+		house.global_position = p
+		add_population_max(HOUSE_POPULATION_BONUS)
 	else:
 		var warehouse := _WarehouseFactory.create_warehouse()
 		world.add_child(warehouse)

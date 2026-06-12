@@ -760,6 +760,8 @@ func _create_build_preview(build_type: int) -> void:
 			_build_preview = load("res://scripts/skywatch_scene.gd").create_skywatch()
 		GameState.BUILD_MARKET:
 			_build_preview = _MarketFactory.create_market(1)
+		GameState.BUILD_HOUSE:
+			_build_preview = load("res://scripts/house_scene.gd").create_house()
 		_:
 			return
 	_build_preview_type = build_type
