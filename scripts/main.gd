@@ -703,23 +703,26 @@ func _setup_commander_build_ui() -> void:
 		tabs.set_tab_disabled(_market_tab_idx, not GameState.has_market_building)
 	)
 
-	var market_scroll := ScrollContainer.new()
-	market_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	market_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	market_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	market_tab.add_child(market_scroll)
+	# Сделки сгруппированы по ресурсу-результату: колонка = что получаешь
+	var market_row := HBoxContainer.new()
+	market_row.add_theme_constant_override("separation", 14)
+	market_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	market_tab.add_child(market_row)
 
-	var market_col := VBoxContainer.new()
-	market_col.add_theme_constant_override("separation", 8)
-	market_scroll.add_child(market_col)
-	_add_market_button(market_col, "1 coin -> 5 wood", -1, 5, 0)
-	_add_market_button(market_col, "10 coins -> 50 wood", -10, 50, 0)
-	_add_market_button(market_col, "10 wood -> 1 coin", 1, -10, 0)
-	_add_market_button(market_col, "50 wood -> 5 coins", 5, -50, 0)
-	_add_market_button(market_col, "1 coin -> 50 ore", -1, 0, 50)
-	_add_market_button(market_col, "10 coins -> 500 ore", -10, 0, 500)
-	_add_market_button(market_col, "100 ore -> 1 coin", 1, 0, -100)
-	_add_market_button(market_col, "500 ore -> 5 coins", 5, 0, -500)
+	market_row.add_child(_make_market_column("🪙 COIN", UiStyle.TEXT_COIN, [
+		["10 🪵 → 1 🪙",   1, -10,    0],
+		["50 🪵 → 5 🪙",   5, -50,    0],
+		["100 🪨 → 1 🪙",  1,   0, -100],
+		["500 🪨 → 5 🪙",  5,   0, -500],
+	]))
+	market_row.add_child(_make_market_column("🪵 WOOD", Color(0.72, 0.42, 0.16), [
+		["1 🪙 → 5 🪵",   -1,   5,    0],
+		["10 🪙 → 50 🪵", -10,  50,   0],
+	]))
+	market_row.add_child(_make_market_column("🪨 ORE", UiStyle.TEXT_ORE, [
+		["1 🪙 → 50 🪨",   -1,  0,   50],
+		["10 🪙 → 500 🪨", -10, 0,  500],
+	]))
 
 	var workers_tab := MarginContainer.new()
 	workers_tab.name = "Workers"
@@ -806,13 +809,29 @@ func _on_dmg_upgrade_pressed() -> void:
 
 
 
+## Колонка рынка: заголовок-ресурс + сделки, дающие этот ресурс.
+## trades: Array of [text, coin_delta, wood_delta, ore_delta]
+func _make_market_column(title: String, title_col: Color, trades: Array) -> VBoxContainer:
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var hdr := Label.new()
+	hdr.text = title
+	hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_label(hdr, title_col, 15, 2)
+	col.add_child(hdr)
+	for t in trades:
+		_add_market_button(col, t[0] as String, int(t[1]), int(t[2]), int(t[3]))
+	return col
+
+
 func _add_market_button(parent: Node, text: String, coin_delta: int, wood_delta: int, ore_delta: int) -> void:
 	var btn := Button.new()
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.text = text
-	btn.custom_minimum_size = Vector2(260, 38)
-	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	UiStyle.style_button(btn, 16)
+	btn.custom_minimum_size = Vector2(140, 34)
+	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(btn, 14)
 	btn.pressed.connect(func() -> void:
 		GameState.try_market_trade(coin_delta, wood_delta, ore_delta)
 		_refresh_market_buttons()

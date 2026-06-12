@@ -60,6 +60,8 @@ const PLAYER_NO_BUILD_RADIUS := 2.5
 const BUILD_BASE_CLEAR := 6.5
 const BUILD_MAX_GROUND_Y := 0.22
 const BUILD_MINE_CLEAR_RADIUS := 12.0
+## Защитная зона дороги: дорога (полуширина 3.0 + кромка 1.2) + габарит здания.
+const ROAD_BUILD_CLEAR := 6.0
 
 var coins: int = 10
 var ore: int = 250
@@ -575,6 +577,8 @@ func can_place_build_at(world_pos: Vector3) -> bool:
 		return false
 	if _is_in_player_no_build(world_pos):
 		return false
+	if _is_near_enemy_road(world_pos):
+		return false
 	for mine in get_tree().get_nodes_in_group(&"mine"):
 		if not (mine is Node3D) or not is_instance_valid(mine):
 			continue
@@ -584,6 +588,38 @@ func can_place_build_at(world_pos: Vector3) -> bool:
 		if dx * dx + dz * dz <= BUILD_MINE_CLEAR_RADIUS * BUILD_MINE_CLEAR_RADIUS:
 			return false
 	return true
+
+
+## Точка ближе ROAD_BUILD_CLEAR к пути врагов: визуальная дорога (Mission 1),
+## прямой коридор спаун→база (Mission 1/Endless) или Path3D (Mission 2).
+func _is_near_enemy_road(p: Vector3) -> bool:
+	var pt := Vector2(p.x, p.z)
+
+	# Mission 2 — дизайнерский Path3D
+	var m2 := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
+	if m2 != null and m2.curve != null:
+		var closest_local := m2.curve.get_closest_point(m2.to_local(p))
+		var g := m2.to_global(closest_local)
+		return pt.distance_to(Vector2(g.x, g.z)) <= ROAD_BUILD_CLEAR
+
+	# Mission 1 / Endless — визуальная дорога из WorldBuilder
+	var wb := get_tree().get_first_node_in_group(&"enemy_road")
+	if wb != null and wb.has_method(&"get_road_points_2d"):
+		var pts: PackedVector2Array = wb.call(&"get_road_points_2d")
+		for i in pts.size() - 1:
+			var c := Geometry2D.get_closest_point_to_segment(pt, pts[i], pts[i + 1])
+			if pt.distance_to(c) <= ROAD_BUILD_CLEAR:
+				return true
+
+	# Фактический коридор движения: враги идут по прямой от спауна к базе
+	var spawn := get_tree().get_first_node_in_group(&"enemy_spawn") as Node3D
+	if spawn != null:
+		var a := Vector2(spawn.global_position.x, spawn.global_position.z)
+		var b := Vector2(6.0, 0.0)  # BASE_TARGET из enemy.gd
+		var c2 := Geometry2D.get_closest_point_to_segment(pt, a, b)
+		if pt.distance_to(c2) <= ROAD_BUILD_CLEAR:
+			return true
+	return false
 
 
 func try_place_tower(world_pos: Vector3) -> bool:

@@ -32,10 +32,20 @@ const C_ROAD_EDG := Color(0.54, 0.45, 0.28)
 
 
 func _ready() -> void:
+	add_to_group(&"enemy_road")
 	_clear_generated()
 	_build_hills()
 	_build_road()
 	_ensure_containers()
+
+
+## Точки осевой линии дороги в мировых XZ — для запрета строительства на дороге.
+func get_road_points_2d() -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in RD_X.size():
+		var g := to_global(Vector3(RD_X[i], 0.0, RD_Z[i]))
+		pts.append(Vector2(g.x, g.z))
+	return pts
 
 
 # ── Removes previously generated nodes so @tool reruns cleanly ─────────────────
