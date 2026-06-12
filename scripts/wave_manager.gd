@@ -49,6 +49,16 @@ func skip_next_pending_wave() -> void:
 			return
 
 
+## Спавн дополнительных врагов вне расписания волн (казино ATTACK и т.п.).
+## Использует обычную точку спауна и маршрут, как у волн.
+func spawn_extra(normal_n: int) -> void:
+	var world := get_parent()
+	if world == null:
+		return
+	for i: int in normal_n:
+		_spawn_one(world, KIND_NORMAL, i * 0.02)
+
+
 func _spawn_wave_index(idx: int) -> void:
 	var world := get_parent()
 	if world == null:

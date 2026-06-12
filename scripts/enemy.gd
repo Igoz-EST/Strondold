@@ -350,9 +350,8 @@ func _pick_ally_duel_candidate() -> CharacterBody3D:
 	var best: CharacterBody3D = null
 	var best_d2: float        = INF
 	var p := global_position
+	# Рабочие (шахтёры/дровосеки) не входят в цели — враги дерутся только с воинами.
 	var cand: Array = get_tree().get_nodes_in_group(&"warrior")
-	for n2 in get_tree().get_nodes_in_group(&"worker"):
-		cand.append(n2)
 	for n in cand:
 		if not (n is CharacterBody3D) or not is_instance_valid(n):
 			continue

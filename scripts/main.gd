@@ -1835,13 +1835,9 @@ func _casino_spawn_free_knight() -> void:
 
 
 func _casino_spawn_enemy_attack() -> void:
-	var spawn_node := get_node_or_null("ExteriorSpawn") as Node3D
-	var origin := spawn_node.global_position if spawn_node != null else Vector3(80.0, 0.0, 0.0)
-	for i in 5:
-		var e := _EnemyScene.instantiate()
-		add_child(e)
-		var angle := float(i) / 5.0 * TAU
-		e.global_position = origin + Vector3(cos(angle) * 4.0, 0.0, sin(angle) * 4.0)
+	var wm: Node = get_node_or_null("WaveManager")
+	if wm != null and wm.has_method(&"spawn_extra"):
+		wm.call(&"spawn_extra", 5)
 
 
 func _casino_try_spawn_giant() -> void:

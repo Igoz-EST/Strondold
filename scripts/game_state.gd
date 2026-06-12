@@ -152,6 +152,7 @@ func reset_run() -> void:
 	unbreakable_base         = false
 	flag_placement_mode      = false
 	flag_placement_barracks  = null
+	has_market_building      = false
 	coins_changed.emit(coins)
 	ore_changed.emit(ore)
 	wood_changed.emit(wood)
@@ -159,6 +160,7 @@ func reset_run() -> void:
 	commander_mode_changed.emit(commander_active)
 	pending_build_changed.emit(false)
 	building_levels_changed.emit()
+	market_building_changed.emit()
 
 
 func sell_ore_for_coins() -> void:
