@@ -1,4 +1,4 @@
-[gd_scene format=4 uid="uid://c5g4vk8n2j0t1"]
+[gd_scene format=3 uid="uid://c5g4vk8n2j0t1"]
 
 [ext_resource type="Script" uid="uid://b80qfj27vqu30" path="res://scripts/main.gd" id="1_main"]
 
@@ -15,7 +15,6 @@ seamless = true
 sky_top_color = Color(0.1, 0.45, 0.98, 1)
 sky_horizon_color = Color(0.55, 0.78, 1, 1)
 sky_curve = 0.11
-sky_energy_multiplier = 1.1
 sky_cover = SubResource("NoiseTexture2D_cloud")
 sky_cover_modulate = Color(0.96, 0.99, 1, 0.48)
 ground_bottom_color = Color(0.1, 0.12, 0.09, 1)
@@ -31,30 +30,30 @@ background_mode = 2
 sky = SubResource("Sky_day")
 ambient_light_source = 3
 ambient_light_color = Color(0.52, 0.62, 0.88, 1)
-ambient_light_energy = 0.55
+ambient_light_energy = 0.46
 tonemap_mode = 3
 tonemap_exposure = 0.96
 glow_enabled = true
 glow_normalized = true
-glow_intensity = 0.45
+glow_intensity = 0.25
 glow_bloom = 0.12
 glow_blend_mode = 2
 fog_enabled = true
-fog_light_color = Color(0.72, 0.8, 0.92, 1)
+fog_light_color = Color(0.78431374, 0.8235294, 0.8627451, 1)
 fog_light_energy = 0.28
 fog_sun_scatter = 0.5
-fog_density = 0.0012
+fog_density = 0.002
 fog_sky_affect = 0.38
 
-[node name="Main" type="Node3D"]
+[node name="Main" type="Node3D" unique_id=713216702]
 script = ExtResource("1_main")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1608159448]
 environment = SubResource("Environment_day")
 
-[node name="CanvasLayer" type="CanvasLayer" parent="."]
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=625785142]
 
-[node name="CoinLabel" type="Label" parent="CanvasLayer"]
+[node name="CoinLabel" type="Label" parent="CanvasLayer" unique_id=195313335]
 offset_left = 16.0
 offset_top = 12.0
 offset_right = 248.0
@@ -66,7 +65,7 @@ theme_override_font_sizes/font_size = 24
 text = "Coins: 0"
 vertical_alignment = 1
 
-[node name="OreLabel" type="Label" parent="CanvasLayer"]
+[node name="OreLabel" type="Label" parent="CanvasLayer" unique_id=1033108788]
 offset_left = 256.0
 offset_top = 12.0
 offset_right = 520.0
@@ -78,7 +77,7 @@ theme_override_font_sizes/font_size = 24
 text = "Ore: 0"
 vertical_alignment = 1
 
-[node name="BaseHpLabel" type="Label" parent="CanvasLayer"]
+[node name="BaseHpLabel" type="Label" parent="CanvasLayer" unique_id=1636549436]
 offset_left = 16.0
 offset_top = 52.0
 offset_right = 520.0
@@ -90,11 +89,14 @@ theme_override_font_sizes/font_size = 22
 text = "Base: 1000 / 1000"
 vertical_alignment = 1
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=195515992]
 transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 48, 0)
 light_color = Color(1, 0.94, 0.82, 1)
-light_energy = 1.1
+light_energy = 1.15
+light_angular_distance = 2.6
 shadow_enabled = true
+shadow_blur = 1.481
+directional_shadow_blend_splits = true
 directional_shadow_split_1 = 0.12
 directional_shadow_split_2 = 0.35
 directional_shadow_max_distance = 250.0

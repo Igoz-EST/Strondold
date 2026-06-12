@@ -25,3 +25,7 @@ UiStyle="*res://scripts/ui_style.gd"
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/zylann.hterrain/plugin.cfg")
+
+[rendering]
+
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=4

@@ -22,13 +22,13 @@ const MG_H : Array[float] = [ 13, 14,  12, 14,  11, 12,  10, 11,  12, 11]
 const MG_R : Array[float] = [ 20, 21,  19, 20,  17, 18,  16, 17,  18, 18]
 
 # ─── Colors ─────────────────────────────────────────────────────────────────────
-const C_GROUND_A := Color(0.32, 0.55, 0.38)
-const C_GROUND_B := Color(0.28, 0.50, 0.33)
-const C_HILL_BOT := Color(0.24, 0.50, 0.19)
-const C_HILL_MID := Color(0.30, 0.55, 0.23)
-const C_HILL_TOP := Color(0.36, 0.58, 0.27)
-const C_ROAD     := Color(0.65, 0.54, 0.35)
-const C_ROAD_EDG := Color(0.54, 0.45, 0.28)
+const C_GROUND_A := Color("#5E7C4B")
+const C_GROUND_B := Color("#516D41")
+const C_HILL_BOT := Color("#49633C")
+const C_HILL_MID := Color("#5A7549")
+const C_HILL_TOP := Color("#6B8458")
+const C_ROAD     := Color("#B1956A")
+const C_ROAD_EDG := Color("#8E7850")
 
 
 func _ready() -> void:
@@ -77,7 +77,7 @@ func _build_ground_overlay() -> void:
 			st.add_vertex(Vector3(x0,0.01,z0)); st.add_vertex(Vector3(x1,0.01,z0)); st.add_vertex(Vector3(x0,0.01,z1))
 			st.add_vertex(Vector3(x1,0.01,z0)); st.add_vertex(Vector3(x1,0.01,z1)); st.add_vertex(Vector3(x0,0.01,z1))
 	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true;  mat.roughness = 0.94
+	mat.vertex_color_use_as_albedo = true;  mat.vertex_color_is_srgb = true;  mat.roughness = 0.94
 	var mi := MeshInstance3D.new()
 	mi.name = "GroundOverlay";  mi.mesh = st.commit()
 	mi.set_surface_override_material(0, mat)
@@ -122,7 +122,7 @@ func _road_strip(parent: Node3D, p0: Vector3, p1: Vector3,
 	st.add_vertex(v0); st.add_vertex(v1); st.add_vertex(v2)
 	st.add_vertex(v1); st.add_vertex(v3); st.add_vertex(v2)
 	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true; mat.roughness = 0.96
+	mat.vertex_color_use_as_albedo = true; mat.vertex_color_is_srgb = true; mat.roughness = 0.96
 	var mi := MeshInstance3D.new()
 	mi.mesh = st.commit(); mi.set_surface_override_material(0, mat)
 	mi.cast_shadow = MeshInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -176,7 +176,7 @@ func _add_dome(parent: Node3D, x: float, z: float,
 		st.set_color(C_HILL_TOP); st.set_normal(_fn(v0,v1,tp))
 		st.add_vertex(v0); st.add_vertex(v1); st.add_vertex(tp)
 	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true; mat.roughness = 0.88
+	mat.vertex_color_use_as_albedo = true; mat.vertex_color_is_srgb = true; mat.roughness = 0.88
 	var mi := MeshInstance3D.new()
 	mi.name = "Hill"; mi.mesh = st.commit(); mi.position = Vector3(x,0.0,z)
 	mi.set_surface_override_material(0, mat)
