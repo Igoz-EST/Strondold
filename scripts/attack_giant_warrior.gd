@@ -10,7 +10,7 @@ func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 	if is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
 		_hp_bar.call(&"set_hp", hp, max_hp)
 	if hp <= 0:
-		SoundManager.play_npc_death()
+		SoundManager.play_giant_death()
 		set_physics_process(false)
 		if _duel_enemy != null and is_instance_valid(_duel_enemy) and _duel_enemy.has_method(&"notify_ally_destroyed"):
 			_duel_enemy.call(&"notify_ally_destroyed", self)

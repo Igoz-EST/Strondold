@@ -538,9 +538,11 @@ func _do_pickaxe_strike() -> void:
 	if space_left <= 0:
 		return
 	if _is_woodcutter():
+		SoundManager.play_wood_chop()
 		if _target_mine.has_method(&"try_chop_worker_hit"):
 			_carry += int(_target_mine.call(&"try_chop_worker_hit", 10))
 		return
+	SoundManager.play_worker_mine()
 	var want: int = mini(10, space_left)
 	if _target_mine.has_method(&"try_extract_worker_batch"):
 		var got: int = int(_target_mine.call(&"try_extract_worker_batch", want))

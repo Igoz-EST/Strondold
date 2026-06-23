@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://my4xjw28u5bj"
+path="res://.godot/imported/magic tower shoot.wav-d057b899a8e777123edc618f91345d5c.sample"
+
+[deps]
+
+source_file="res://assets/audio/sfx/towers/magic tower shoot.wav"
+dest_files=["res://.godot/imported/magic tower shoot.wav-d057b899a8e777123edc618f91345d5c.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

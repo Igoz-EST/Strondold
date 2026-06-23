@@ -113,7 +113,12 @@ func button_style(bg: Color, border: Color) -> StyleBoxFlat:
 
 
 ## Applies full Kenney button theme to a Button node.
+## Also auto-wires the shared UI click sound to every button — single hook so
+## no call site needs to connect it manually.
 func style_button(button: Button, font_size: int = 15) -> void:
+	var cb := Callable(SoundManager, &"play_ui_click")
+	if not button.pressed.is_connected(cb):
+		button.pressed.connect(cb)
 	button.add_theme_font_size_override(&"font_size", font_size)
 	button.add_theme_color_override(&"font_color",          TEXT_MAIN)
 	button.add_theme_color_override(&"font_hover_color",    Color(1.0, 0.95, 0.80, 1.0))

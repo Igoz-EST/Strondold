@@ -255,7 +255,7 @@ func apply_sword_hit(damage: int = 10, attacker: Node = null) -> void:
 	if is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
 		_hp_bar.call(&"set_hp", hp, max_hp)
 	if hp <= 0:
-		SoundManager.play_npc_death()
+		SoundManager.play_knight_death()
 		if _duel_enemy != null and is_instance_valid(_duel_enemy) and _duel_enemy.has_method(&"notify_ally_destroyed"):
 			_duel_enemy.call(&"notify_ally_destroyed", self)
 		_duel_enemy = null
@@ -265,6 +265,7 @@ func apply_sword_hit(damage: int = 10, attacker: Node = null) -> void:
 		return
 	if from_enemy:
 		SoundManager.play_one_shot(SoundManager.KEY_SHIELD_HIT)
+		SoundManager.play_knight_pain()
 	elif from_other:
 		SoundManager.play_punch_for_target(get_instance_id(), -2.0)
 
@@ -333,7 +334,7 @@ func _physics_process(delta: float) -> void:
 			_attack_cd -= delta
 			if _attack_cd <= 0.0 and tgt.has_method(&"apply_sword_hit"):
 				_attack_cd = ATTACK_INTERVAL
-				SoundManager.play_one_shot(SoundManager.KEY_SWORD_SWING, 0.14, -4.0)
+				SoundManager.play_sword_attack(-4.0)
 				tgt.call(&"apply_sword_hit", melee_damage)
 				_w_play(_W_ANIM_ATTACK, false)
 	else:

@@ -100,7 +100,7 @@ func _do_combat(delta: float) -> void:
 		_attack_cd -= delta
 		if _attack_cd <= 0.0 and tgt.has_method(&"apply_sword_hit"):
 			_attack_cd = attack_interval
-			SoundManager.play_one_shot(SoundManager.KEY_SWORD_SWING, 0.14, -4.0)
+			SoundManager.play_sword_attack(-4.0)
 			tgt.call(&"apply_sword_hit", melee_damage, self)
 			_w_play(_W_ANIM_ATTACK, false)
 
