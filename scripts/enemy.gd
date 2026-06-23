@@ -324,12 +324,12 @@ func apply_sword_hit(damage: int = 10, _attacker: Node = null,
 	if hp <= 0:
 		_set_anim(AState.DEAD)
 		set_physics_process(false)
-		SoundManager.play_enemy_death(kind)
+		SoundManager.play_enemy_die(kind, global_position)
 		FeedbackFx.show_coin_gain(get_parent(), global_position + Vector3(0.0, 1.35, 0.0), 1)
 		GameState.add_coin()
 		get_tree().create_timer(0.7).timeout.connect(queue_free)
 	elif actual > 0:
-		SoundManager.play_enemy_pain(kind)
+		SoundManager.play_enemy_hurt(kind, global_position)
 		_try_play(_ANIM_HIT, false)
 
 

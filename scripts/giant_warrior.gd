@@ -243,7 +243,7 @@ func _do_combat(delta: float) -> void:
 		_attack_cd -= delta
 		if _attack_cd <= 0.0 and tgt.has_method(&"apply_sword_hit"):
 			_attack_cd = attack_interval
-			SoundManager.play_sword_attack(-2.0)
+			SoundManager.play_sfx(&"sword_attack", global_position, -2.0)
 			tgt.call(&"apply_sword_hit", melee_damage, self)
 			_deal_splash_damage(tgt)
 			_gw_play(_GW_ANIM_ATTACK, false)
@@ -256,7 +256,7 @@ func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 	if is_instance_valid(_hp_bar) and _hp_bar.has_method(&"set_hp"):
 		_hp_bar.call(&"set_hp", hp, max_hp)
 	if hp <= 0:
-		SoundManager.play_giant_death()
+		SoundManager.play_sfx(&"giant_die", global_position)
 		GameState.has_giant_warrior = false
 		set_physics_process(false)
 		if _duel_enemy != null and is_instance_valid(_duel_enemy) and _duel_enemy.has_method(&"notify_ally_destroyed"):
@@ -265,5 +265,5 @@ func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 			_gw_death_fall()
 		get_tree().create_timer(0.7).timeout.connect(queue_free)
 	else:
-		SoundManager.play_impact()
+		SoundManager.play_sfx(&"impact", global_position)
 		_gw_play(_GW_ANIM_HIT, false)

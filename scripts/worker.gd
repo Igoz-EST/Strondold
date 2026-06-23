@@ -276,7 +276,7 @@ func apply_sword_hit(damage: int = 10, attacker: Node = null) -> void:
 	hp -= damage
 	_refresh_hp_bar_mesh()
 	if hp <= 0:
-		SoundManager.play_npc_death()
+		SoundManager.play_sfx(&"impact", global_position)
 		_state = DEAD
 		if _duel_enemy != null and is_instance_valid(_duel_enemy) and _duel_enemy.has_method(&"notify_ally_destroyed"):
 			_duel_enemy.call(&"notify_ally_destroyed", self)
@@ -285,9 +285,9 @@ func apply_sword_hit(damage: int = 10, attacker: Node = null) -> void:
 		return
 	if attacker != null and is_instance_valid(attacker):
 		if attacker.is_in_group(&"enemy"):
-			SoundManager.play_punch_for_target(get_instance_id())
+			SoundManager.play_sfx(&"impact", global_position)
 		else:
-			SoundManager.play_punch_for_target(get_instance_id(), -3.0)
+			SoundManager.play_sfx(&"impact", global_position, -3.0)
 
 
 func _process(_delta: float) -> void:
@@ -538,11 +538,11 @@ func _do_pickaxe_strike() -> void:
 	if space_left <= 0:
 		return
 	if _is_woodcutter():
-		SoundManager.play_wood_chop()
+		SoundManager.play_sfx(&"chop_wood", global_position)
 		if _target_mine.has_method(&"try_chop_worker_hit"):
 			_carry += int(_target_mine.call(&"try_chop_worker_hit", 10))
 		return
-	SoundManager.play_worker_mine()
+	SoundManager.play_sfx(&"mine_rock", global_position)
 	var want: int = mini(10, space_left)
 	if _target_mine.has_method(&"try_extract_worker_batch"):
 		var got: int = int(_target_mine.call(&"try_extract_worker_batch", want))

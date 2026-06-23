@@ -31,7 +31,7 @@ func _on_body_entered(body: Node3D) -> void:
 	if body.has_method(&"apply_sword_hit"):
 		body.call(&"apply_sword_hit", _damage, self, _damage_type)
 		_apply_splash(body)
-		SoundManager.play_projectile_hit(_damage_type == 1)
+		SoundManager.play_sfx(&"impact", global_position)
 	queue_free()
 
 
@@ -42,7 +42,7 @@ func _hit_target() -> void:
 	if _target.has_method(&"apply_sword_hit"):
 		_target.call(&"apply_sword_hit", _damage, self, _damage_type)
 		_apply_splash(_target)
-		SoundManager.play_projectile_hit(_damage_type == 1)
+		SoundManager.play_sfx(&"impact", global_position)
 	queue_free()
 
 

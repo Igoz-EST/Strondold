@@ -166,4 +166,5 @@ func _launch_at(target: Node3D) -> void:
 	world.add_child(prj)
 	if prj.has_method(&"setup"):
 		prj.call(&"setup", muzzle, target, projectile_damage, splash_damage, splash_radius, damage_type)
-	SoundManager.play_tower_shoot(tower_type)
+	var shoot_group := &"tower_shoot_magic" if tower_type == TOWER_TYPE_MAGIC else &"tower_shoot_phys"
+	SoundManager.play_sfx(shoot_group, global_position)

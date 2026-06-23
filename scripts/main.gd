@@ -549,7 +549,7 @@ func _setup_commander_build_ui() -> void:
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tabs.mouse_filter = Control.MOUSE_FILTER_STOP
 	tabs.focus_mode = Control.FOCUS_NONE
-	tabs.tab_changed.connect(func(_idx: int) -> void: SoundManager.play_ui_switch())
+	tabs.tab_changed.connect(func(_idx: int) -> void: SoundManager.play_ui(&"ui_switch"))
 	outer_col.add_child(tabs)
 
 	var build_tab := MarginContainer.new()
@@ -1151,7 +1151,7 @@ func _on_base_destroyed() -> void:
 	close_pause_menu()
 	get_tree().paused = true
 	_game_over_layer.visible = true
-	SoundManager.play_game_over()
+	SoundManager.play_ui(&"game_over")
 	if _restart_button:
 		_restart_button.grab_focus()
 
@@ -1172,7 +1172,7 @@ func _try_show_victory() -> void:
 	close_pause_menu()
 	get_tree().paused = true
 	_win_layer.visible = true
-	SoundManager.play_victory()
+	SoundManager.play_ui(&"victory")
 	if _win_play_again_button:
 		_win_play_again_button.grab_focus()
 
@@ -1334,7 +1334,7 @@ func open_pause_menu() -> void:
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_pause_menu_layer.visible = true
-	SoundManager.play_ui_switch()
+	SoundManager.play_ui(&"ui_switch")
 	_sync_music_slider_from_player()
 	_sync_sound_slider_from_manager()
 	_refresh_video_settings()
@@ -1349,7 +1349,7 @@ func close_pause_menu() -> void:
 	get_tree().paused = false
 	if _pause_menu_layer:
 		_pause_menu_layer.visible = false
-	SoundManager.play_ui_switch()
+	SoundManager.play_ui(&"ui_switch")
 	if not GameState.commander_active and not GameState.dev_console_open:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -2023,7 +2023,7 @@ func _open_building_panel(building: Node3D) -> void:
 	_position_building_panel(building)
 	_show_selection_ring(building)
 	if not was_open:
-		SoundManager.play_ui_switch()
+		SoundManager.play_ui(&"ui_switch")
 
 
 func _close_building_panel() -> void:
@@ -2032,7 +2032,7 @@ func _close_building_panel() -> void:
 	_bld_selected = null
 	_hide_selection_ring()
 	if was_open:
-		SoundManager.play_ui_switch()
+		SoundManager.play_ui(&"ui_switch")
 
 
 func _position_building_panel(building: Node3D) -> void:

@@ -160,7 +160,7 @@ func try_extract_worker_batch(max_amount: int) -> int:
 func apply_sword_hit(_damage: int = 0, _attacker: Node = null) -> void:
 	if ore_remaining <= 0:
 		return
-	SoundManager.play_one_shot(SoundManager.KEY_HIT_STONE, 0.05, -1.0)
+	SoundManager.play_sfx(&"mine_rock", global_position, -1.0)
 	var take: int = mini(ORE_PER_HIT, ore_remaining)
 	ore_remaining -= take
 	_refresh_mine_bar()

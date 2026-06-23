@@ -82,6 +82,10 @@ var _hit_box: BoxShape3D
 ## One damage per breakable per swing (hitbox can overlap several frames).
 var _hit_ids_this_swing: Dictionary = {}
 
+## Discrete footsteps: seconds between footfalls while walking.
+const STEP_INTERVAL := 0.42
+var _step_cd := 0.0
+
 var _king_model:   Node3D          = null
 var _king_anim:    AnimationPlayer = null
 var _punch_right   := true
@@ -559,7 +563,6 @@ func _update_commander_drag(screen_pos: Vector2) -> void:
 func _physics_process(delta: float) -> void:
 	if _inside_base:
 		_set_commander_enter_hint_visible(false)
-		SoundManager.set_grass_walk_loop(false)
 		global_position = _interior_spawn.global_position
 		velocity = Vector3.ZERO
 		_update_commander_camera(delta)
@@ -596,8 +599,7 @@ func _physics_process(delta: float) -> void:
 	velocity.x = move.x
 	velocity.z = move.z
 	move_and_slide()
-	var walk_grass := is_on_floor() and Vector2(velocity.x, velocity.z).length() > 0.2
-	SoundManager.set_grass_walk_loop(walk_grass)
+	_update_footsteps(delta)
 	_update_walk_animation(delta)
 	_update_king_animation(delta)
 	_update_sword_swing(delta)
@@ -628,11 +630,23 @@ func _try_start_swing() -> void:
 		return
 	_attack_ready_at = now + ATTACK_COOLDOWN
 	_hit_ids_this_swing.clear()
-	SoundManager.play_sword_attack()
+	SoundManager.play_sfx(&"sword_attack", global_position)
 	_sword_swinging = true
 	_sword_swing_elapsed = 0.0
 	_swing_arc.visible = true
 	_king_trigger_punch()
+
+
+## Discrete spatial footsteps while moving on the ground (replaces the old loop).
+func _update_footsteps(delta: float) -> void:
+	var moving := is_on_floor() and Vector2(velocity.x, velocity.z).length() > 0.2
+	if not moving:
+		_step_cd = 0.0
+		return
+	_step_cd -= delta
+	if _step_cd <= 0.0:
+		_step_cd = STEP_INTERVAL
+		SoundManager.play_sfx(&"step_dirt", global_position)
 
 
 func _update_sword_swing(delta: float) -> void:

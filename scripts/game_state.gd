@@ -144,8 +144,8 @@ func damage_base(amount: int) -> void:
 		return
 	base_hp = maxi(0, base_hp - amount)
 	base_hp_changed.emit(base_hp, BASE_MAX_HP)
-	# Атака базы: глухой удар по воротам (выделенного звука нет — переиспользуем hit_wood).
-	SoundManager.play_one_shot(SoundManager.KEY_HIT_WOOD, 0.12, 2.0)
+	# Атака базы: глухой удар по воротам (3D у позиции ворот; своего звука нет — wood).
+	SoundManager.play_sfx(&"chop_wood", Vector3(6.0, 1.0, 0.0), 2.0, 0.12)
 	if base_hp <= 0:
 		game_over = true
 		base_destroyed.emit()
@@ -362,7 +362,7 @@ func buy_tower_phys_upgrade(tower: Node3D) -> bool:
 		ore -= TOWER_PHYS_ORE_COSTS[lvl]
 		ore_changed.emit(ore)
 	tower.call(&"upgrade_phys")
-	SoundManager.play_build_upgrade()
+	SoundManager.play_sfx(&"build_upgrade", tower.global_position)
 	building_levels_changed.emit()
 	return true
 
@@ -374,7 +374,7 @@ func buy_tower_convert_to_magic(tower: Node3D) -> bool:
 		ore -= TOWER_CONV_ORE
 		ore_changed.emit(ore)
 	tower.call(&"convert_to_magic")
-	SoundManager.play_build_upgrade()
+	SoundManager.play_sfx(&"build_upgrade", tower.global_position)
 	building_levels_changed.emit()
 	return true
 
@@ -387,7 +387,7 @@ func buy_tower_magic_upgrade(tower: Node3D) -> bool:
 		ore -= TOWER_MAGIC_ORE_COSTS[lvl]
 		ore_changed.emit(ore)
 	tower.call(&"upgrade_magic")
-	SoundManager.play_build_upgrade()
+	SoundManager.play_sfx(&"build_upgrade", tower.global_position)
 	building_levels_changed.emit()
 	return true
 
@@ -405,7 +405,7 @@ func buy_barracks_upgrade() -> bool:
 	ore_changed.emit(ore)
 	barracks_level += 1
 	_apply_level_to_group(&"barracks", barracks_level)
-	SoundManager.play_build_upgrade()
+	SoundManager.play_sfx(&"build_upgrade", _group_pos(&"barracks"))
 	building_levels_changed.emit()
 	return true
 
@@ -440,8 +440,14 @@ func buy_building_upgrade(building: Node3D) -> bool:
 			wood_changed.emit(wood)
 	if building.has_method(&"apply_upgrade_level"):
 		building.call(&"apply_upgrade_level", lvl + 1)
-	SoundManager.play_build_upgrade()
+	SoundManager.play_sfx(&"build_upgrade", building.global_position)
 	return true
+
+
+## Позиция первого узла группы (для звука у здания, когда конкретного узла нет).
+func _group_pos(group: StringName) -> Vector3:
+	var n := get_tree().get_first_node_in_group(group) as Node3D
+	return n.global_position if n != null else Vector3.ZERO
 
 
 func can_afford_building_upgrade(building: Node3D) -> bool:
@@ -473,19 +479,23 @@ func grant_random_building_upgrade() -> bool:
 	if cands.is_empty():
 		return false
 	var pick = cands[randi() % cands.size()]
+	var up_pos := Vector3.ZERO
 	if pick is StringName:
 		barracks_level += 1
 		_apply_level_to_group(&"barracks", barracks_level)
+		up_pos = _group_pos(&"barracks")
 	elif (pick as Node3D).is_in_group(&"market_building"):
 		var b := pick as Node3D
 		b.call(&"apply_upgrade_level", int(b.get(&"upgrade_level")) + 1)
+		up_pos = b.global_position
 	else:
 		var t := pick as Node3D
 		if int(t.get(&"tower_type")) == 1:
 			t.call(&"upgrade_magic")
 		else:
 			t.call(&"upgrade_phys")
-	SoundManager.play_build_upgrade()
+		up_pos = t.global_position
+	SoundManager.play_sfx(&"build_upgrade", up_pos)
 	building_levels_changed.emit()
 	return true
 
@@ -499,9 +509,9 @@ func _apply_level_to_group(group_name: StringName, level: int) -> void:
 func set_commander_mode(active: bool) -> void:
 	commander_active = active
 	if active:
-		SoundManager.play_commander_enter()
+		SoundManager.play_ui(&"commander_enter")
 	else:
-		SoundManager.play_commander_exit()
+		SoundManager.play_ui(&"commander_exit")
 		awaiting_build_type = BUILD_NONE
 		pending_build_changed.emit(false)
 	commander_mode_changed.emit(active)
@@ -682,7 +692,7 @@ func try_place_tower(world_pos: Vector3) -> bool:
 		var warehouse := _WarehouseFactory.create_warehouse()
 		world.add_child(warehouse)
 		warehouse.global_position = p
-	SoundManager.play_build_place()  # тройной «молоток»
+	SoundManager.play_build_place(p)  # тройной «молоток» у места стройки
 	awaiting_build_type = BUILD_NONE
 	pending_build_changed.emit(false)
 	return true

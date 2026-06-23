@@ -321,7 +321,7 @@ func try_chop_worker_hit(damage: int) -> int:
 	if not is_tree or is_chest or hp <= 0:
 		return 0
 	var fx_pos := global_position + Vector3(0.0, 2.3, 0.0)
-	SoundManager.play_one_shot(SoundManager.KEY_HIT_WOOD)
+	SoundManager.play_sfx(&"chop_wood", global_position)
 	FeedbackFx.show_wood_hit(get_parent(), fx_pos)
 	hp -= damage
 	if not _bar_shown:
@@ -340,13 +340,13 @@ func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 		return
 	var fx_pos := global_position + Vector3(0.0, 2.3 if is_tree else 0.6, 0.0)
 	if is_chest:
-		SoundManager.play_one_shot(SoundManager.KEY_HIT_CHEST)
+		SoundManager.play_sfx(&"hit_chest", global_position)
 		FeedbackFx.show_stone_hit(get_parent(), fx_pos)
 	elif is_tree:
-		SoundManager.play_one_shot(SoundManager.KEY_HIT_WOOD)
+		SoundManager.play_sfx(&"chop_wood", global_position)
 		FeedbackFx.show_wood_hit(get_parent(), fx_pos)
 	else:
-		SoundManager.play_one_shot(SoundManager.KEY_HIT_STONE)
+		SoundManager.play_sfx(&"mine_rock", global_position)
 		FeedbackFx.show_stone_hit(get_parent(), fx_pos)
 	hp -= damage
 	if not _bar_shown:
