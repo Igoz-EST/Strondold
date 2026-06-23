@@ -1,17 +1,11 @@
 extends Node
 ## Autoload: one-shots, looped footsteps, cooldowns, pitch ±5%, optional start delay up to 20ms.
 
-const SFX_DIR := "res://assets/audio/sfx/"
-
-const KEY_SWORD_SWING := &"sword_swing"
-const KEY_JUMP := &"jump"
-const KEY_GRASS_WALK := &"grass_walk"
-const KEY_PUNCH := &"punch"
-const KEY_NPC_DEATH := &"npc_death"
-const KEY_SHIELD_HIT := &"shield_hit"
-const KEY_HIT_WOOD := &"hit_wood"
-const KEY_HIT_STONE := &"hit_stone"
-const KEY_HIT_CHEST := &"hit_chest"
+# ── Kept keys (repointed to сегодняшние ассеты; старые файлы удалены) ──────────
+const KEY_GRASS_WALK := &"grass_walk"   # footstep loop → new flac
+const KEY_HIT_WOOD := &"hit_wood"       # → woodcutter wood hit
+const KEY_HIT_STONE := &"hit_stone"     # → pick-on-rock
+const KEY_HIT_CHEST := &"hit_chest"     # → coin/treasure
 
 # ── New single-file SFX (Sprint 4) ────────────────────────────────────────────
 const KEY_GAME_OVER         := &"game_over"
@@ -45,20 +39,13 @@ const KEY_KNIGHT_PAIN     := &"knight_pain"
 const KEY_COMMANDER_ENTER := &"commander_enter"  # door open
 const KEY_COMMANDER_EXIT  := &"commander_exit"   # door close
 
-const _FILE_NAMES: Dictionary = {
-	KEY_SWORD_SWING: "sword_swing.wav",
-	KEY_JUMP: "jump.wav",
-	KEY_GRASS_WALK: "grass_walk.wav",
-	KEY_PUNCH: "punch.wav",
-	KEY_NPC_DEATH: "npc_death.wav",
-	KEY_SHIELD_HIT: "shield_hit.wav",
-	KEY_HIT_WOOD: "hit_wood.wav",
-	KEY_HIT_STONE: "hit_stone.wav",
-	KEY_HIT_CHEST: "hit_chest.wav",
-}
-
-## New single-file SFX as full res:// paths (subfolders / special chars).
+## Single-file SFX as full res:// paths (subfolders / special chars).
 const _NEW_FILES: Dictionary = {
+	# Repointed legacy keys → сегодняшние аналоги (старые файлы удалены).
+	KEY_GRASS_WALK: "res://assets/audio/sfx/sfx_step_grass_l.flac",
+	KEY_HIT_WOOD:   "res://assets/audio/sfx/allies/woodcutter/sfx100v2_wood_hit_01.ogg",
+	KEY_HIT_STONE:  "res://assets/audio/sfx/allies/worker/Pick Hitting Rock(1).wav",
+	KEY_HIT_CHEST:  "res://assets/audio/sfx/constructions/upgarde/Picked Coin Echo.wav",
 	KEY_GAME_OVER:          "res://assets/audio/sfx/game_over.wav",
 	KEY_VICTORY:            "res://assets/audio/sfx/Won!.wav",
 	KEY_TOWER_PHYS_SHOOT:   "res://assets/audio/sfx/towers/default tower shoot.wav",
@@ -128,11 +115,6 @@ const _GROUP_FILES: Dictionary = {
 
 ## Extra dB per one-shot (negative = quieter vs user `sfx_volume_db`).
 const _VOL_DB: Dictionary = {
-	KEY_SWORD_SWING: -10.0,
-	KEY_JUMP: -9.0,
-	KEY_PUNCH: -11.0,
-	KEY_NPC_DEATH: -8.0,
-	KEY_SHIELD_HIT: -11.0,
 	KEY_HIT_WOOD: -12.0,
 	KEY_HIT_STONE: -12.0,
 	KEY_HIT_CHEST: -13.0,
@@ -164,12 +146,6 @@ const _VOL_DB: Dictionary = {
 
 ## Minimum seconds between same key (anti-spam).
 const _COOLDOWN: Dictionary = {
-	KEY_SWORD_SWING: 0.12,
-	KEY_JUMP: 0.18,
-	KEY_GRASS_WALK: 0.02,
-	KEY_PUNCH: 0.05,
-	KEY_NPC_DEATH: 0.08,
-	KEY_SHIELD_HIT: 0.09,
 	KEY_HIT_WOOD: 0.06,
 	KEY_HIT_STONE: 0.06,
 	KEY_HIT_CHEST: 0.07,
@@ -241,17 +217,12 @@ func _ensure_buses() -> void:
 
 
 func _load_streams() -> void:
-	# 1. Существующие плоские файлы (имя относительно SFX_DIR).
-	for k in _FILE_NAMES.keys():
-		var st1 := _try_load(SFX_DIR + str(_FILE_NAMES[k]))
-		if st1 != null:
-			_streams[k] = st1
-	# 2. Новые одиночные файлы (полные res:// пути).
+	# 1. Одиночные файлы (полные res:// пути).
 	for k in _NEW_FILES.keys():
 		var st2 := _try_load(str(_NEW_FILES[k]))
 		if st2 != null:
 			_streams[k] = st2
-	# 3. Группы вариантов.
+	# 2. Группы вариантов.
 	for k in _GROUP_FILES.keys():
 		var arr: Array[AudioStream] = []
 		for p in _GROUP_FILES[k]:
@@ -349,21 +320,26 @@ func _play_one_shot_impl(key: StringName, extra_db: float, pitch_lo: float, pitc
 
 
 ## Punch with light debounce per target instance (same frame overlap).
+## Удар по цели (дебаунс на инстанс). Старый punch.wav удалён — используем
+## сегодняшний impact (Socapex new_hits).
 func play_punch_for_target(target_id: int, extra_db: float = 0.0) -> void:
 	var ms := Time.get_ticks_msec()
 	if target_id >= 0 and target_id == _punch_last_id and (ms - _punch_last_ms) < 110:
 		return
 	_punch_last_id = target_id
 	_punch_last_ms = ms
-	play_one_shot(KEY_PUNCH, -1.0, extra_db)
+	play_random(KEY_PROJECTILE_HIT, 0.05, extra_db)
 
 
-func play_jump() -> void:
-	play_one_shot(KEY_JUMP, 0.16, -1.0, 0.88, 0.96)
+## Общий звук удара/импакта (Socapex new_hits) — замена удалённым punch/shield_hit.
+func play_impact(extra_db: float = 0.0) -> void:
+	play_random(KEY_PROJECTILE_HIT, 0.05, extra_db)
 
 
+## Смерть NPC. Выделенного звука для рабочих в сегодняшних ассетах нет —
+## проигрываем impact как финальный удар (см. отчёт, ручная проверка).
 func play_npc_death(extra_db: float = 0.0) -> void:
-	play_one_shot(KEY_NPC_DEATH, 0.06, extra_db, 0.93, 1.04)
+	play_random(KEY_PROJECTILE_HIT, 0.06, extra_db)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

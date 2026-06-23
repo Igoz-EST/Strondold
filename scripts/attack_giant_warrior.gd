@@ -18,5 +18,5 @@ func apply_sword_hit(damage: int = 10, _attacker: Node = null) -> void:
 			_gw_death_fall()
 		get_tree().create_timer(0.7).timeout.connect(queue_free)
 	else:
-		SoundManager.play_one_shot(SoundManager.KEY_SHIELD_HIT)
+		SoundManager.play_impact()
 		_gw_play(_GW_ANIM_HIT, false)

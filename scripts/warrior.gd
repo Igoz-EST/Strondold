@@ -264,7 +264,7 @@ func apply_sword_hit(damage: int = 10, attacker: Node = null) -> void:
 		queue_free()
 		return
 	if from_enemy:
-		SoundManager.play_one_shot(SoundManager.KEY_SHIELD_HIT)
+		SoundManager.play_impact()
 		SoundManager.play_knight_pain()
 	elif from_other:
 		SoundManager.play_punch_for_target(get_instance_id(), -2.0)

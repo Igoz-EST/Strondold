@@ -582,7 +582,7 @@ func _physics_process(delta: float) -> void:
 
 	if is_on_floor() and Input.is_action_just_pressed(&"jump"):
 		velocity.y = JUMP_VELOCITY
-		SoundManager.play_jump()
+		# jump.wav удалён (старый ассет); сегодняшнего аналога нет — звук прыжка убран
 
 	if Input.is_action_just_pressed(&"interact"):
 		if _in_command_zone and is_on_floor():
@@ -628,7 +628,7 @@ func _try_start_swing() -> void:
 		return
 	_attack_ready_at = now + ATTACK_COOLDOWN
 	_hit_ids_this_swing.clear()
-	SoundManager.play_one_shot(SoundManager.KEY_SWORD_SWING)
+	SoundManager.play_sword_attack()
 	_sword_swinging = true
 	_sword_swing_elapsed = 0.0
 	_swing_arc.visible = true
