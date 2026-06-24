@@ -118,7 +118,12 @@ const _UI_GROUPS: Array[StringName] = [
 	&"ui_click", &"ui_switch", &"commander_enter", &"commander_exit",
 ]
 ## 2D groups that follow the SFX volume/bus instead of the UI bus.
-const _GLOBAL_SFX_GROUPS: Array[StringName] = [&"game_over", &"victory"]
+## Construction sounds live here too: in Commander Mode they are player-action
+## feedback (like button clicks), so they must always be clearly audible rather
+## than spatially attenuated across the level.
+const _GLOBAL_SFX_GROUPS: Array[StringName] = [
+	&"game_over", &"victory", &"build_place", &"build_upgrade",
+]
 
 ## Groups that do NOT get pitch randomization (UI, jingles, reward/coin).
 const _NO_PITCH: Array[StringName] = [
@@ -274,12 +279,15 @@ func play_sfx(group: StringName, pos: Vector3, extra_db: float = 0.0, cooldown: 
 	p.play()
 
 
-## Building placement — triple "hammer" hits at the build site.
-func play_build_place(pos: Vector3) -> void:
+## Building placement — triple "hammer" hits as non-positional action feedback
+## (clearly audible in Commander Mode). Spaced out so it reads as hammering,
+## not a machine-gun burst. `pos` is accepted for call-site compatibility but
+## unused — the sound is non-spatial.
+func play_build_place(_pos: Vector3 = Vector3.ZERO) -> void:
 	for i in 3:
-		var delay := 0.12 * float(i)
+		var delay := 0.28 * float(i)
 		get_tree().create_timer(delay).timeout.connect(
-			func() -> void: play_sfx(&"build_place", pos, 0.0, 0.0),
+			func() -> void: play_ui(&"build_place"),
 			CONNECT_ONE_SHOT
 		)
 

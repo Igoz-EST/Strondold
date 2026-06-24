@@ -362,7 +362,7 @@ func buy_tower_phys_upgrade(tower: Node3D) -> bool:
 		ore -= TOWER_PHYS_ORE_COSTS[lvl]
 		ore_changed.emit(ore)
 	tower.call(&"upgrade_phys")
-	SoundManager.play_sfx(&"build_upgrade", tower.global_position)
+	SoundManager.play_ui(&"build_upgrade")
 	building_levels_changed.emit()
 	return true
 
@@ -374,7 +374,7 @@ func buy_tower_convert_to_magic(tower: Node3D) -> bool:
 		ore -= TOWER_CONV_ORE
 		ore_changed.emit(ore)
 	tower.call(&"convert_to_magic")
-	SoundManager.play_sfx(&"build_upgrade", tower.global_position)
+	SoundManager.play_ui(&"build_upgrade")
 	building_levels_changed.emit()
 	return true
 
@@ -387,7 +387,7 @@ func buy_tower_magic_upgrade(tower: Node3D) -> bool:
 		ore -= TOWER_MAGIC_ORE_COSTS[lvl]
 		ore_changed.emit(ore)
 	tower.call(&"upgrade_magic")
-	SoundManager.play_sfx(&"build_upgrade", tower.global_position)
+	SoundManager.play_ui(&"build_upgrade")
 	building_levels_changed.emit()
 	return true
 
@@ -405,7 +405,7 @@ func buy_barracks_upgrade() -> bool:
 	ore_changed.emit(ore)
 	barracks_level += 1
 	_apply_level_to_group(&"barracks", barracks_level)
-	SoundManager.play_sfx(&"build_upgrade", _group_pos(&"barracks"))
+	SoundManager.play_ui(&"build_upgrade")
 	building_levels_changed.emit()
 	return true
 
@@ -440,14 +440,8 @@ func buy_building_upgrade(building: Node3D) -> bool:
 			wood_changed.emit(wood)
 	if building.has_method(&"apply_upgrade_level"):
 		building.call(&"apply_upgrade_level", lvl + 1)
-	SoundManager.play_sfx(&"build_upgrade", building.global_position)
+	SoundManager.play_ui(&"build_upgrade")
 	return true
-
-
-## Позиция первого узла группы (для звука у здания, когда конкретного узла нет).
-func _group_pos(group: StringName) -> Vector3:
-	var n := get_tree().get_first_node_in_group(group) as Node3D
-	return n.global_position if n != null else Vector3.ZERO
 
 
 func can_afford_building_upgrade(building: Node3D) -> bool:
@@ -479,23 +473,19 @@ func grant_random_building_upgrade() -> bool:
 	if cands.is_empty():
 		return false
 	var pick = cands[randi() % cands.size()]
-	var up_pos := Vector3.ZERO
 	if pick is StringName:
 		barracks_level += 1
 		_apply_level_to_group(&"barracks", barracks_level)
-		up_pos = _group_pos(&"barracks")
 	elif (pick as Node3D).is_in_group(&"market_building"):
 		var b := pick as Node3D
 		b.call(&"apply_upgrade_level", int(b.get(&"upgrade_level")) + 1)
-		up_pos = b.global_position
 	else:
 		var t := pick as Node3D
 		if int(t.get(&"tower_type")) == 1:
 			t.call(&"upgrade_magic")
 		else:
 			t.call(&"upgrade_phys")
-		up_pos = t.global_position
-	SoundManager.play_sfx(&"build_upgrade", up_pos)
+	SoundManager.play_ui(&"build_upgrade")
 	building_levels_changed.emit()
 	return true
 
