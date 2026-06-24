@@ -23,6 +23,15 @@ const MELEE_DAMAGE := 10
 
 const MOVE_SPEED := 9.0
 const MAX_HP := 40
+## Extra reach toward the enemy base footprint (Mission 3 base assault).
+const BASE_REACH := 5.0
+
+
+## Enemy base node to assault in Mission 3, or null when not in base-assault mode.
+func _enemy_base_target() -> Node3D:
+	if not GameState.is_base_assault():
+		return null
+	return get_tree().get_first_node_in_group(&"enemy_base") as Node3D
 const WARRIOR_SHIRT := Color(0.1, 0.38, 0.88)
 const WARRIOR_HELM := Color(0.22, 0.52, 0.92)
 const AVATAR_SCALE := 0.92

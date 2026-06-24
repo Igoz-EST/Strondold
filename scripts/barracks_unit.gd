@@ -132,7 +132,7 @@ func _spawn_warrior_slot(slot: int) -> void:
 	world.add_child(w)
 	var spawn_xz := global_position + _rally_offset(slot)
 	var spawn_y  := spawn_xz.y + 0.55
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+	if GameState.is_terrain_mission():
 		spawn_y = _terrain_y_at(spawn_xz) + 0.55
 	w.global_position = Vector3(spawn_xz.x, spawn_y, spawn_xz.z)
 	if w.has_method(&"apply_upgrade_level"):

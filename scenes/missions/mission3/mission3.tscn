@@ -1,0 +1,98 @@
+[gd_scene format=4 uid="uid://cmission3root01"]
+
+[ext_resource type="PackedScene" uid="uid://c5g4vk8n2j0t1" path="res://scenes/game_root.tscn" id="1_gameroot"]
+[ext_resource type="Script" uid="uid://dctorfbvt68y" path="res://scripts/player.gd" id="2_player"]
+[ext_resource type="Script" uid="uid://ca5iuvgsbmh8l" path="res://scripts/base_fortress_visual.gd" id="3_fortress"]
+[ext_resource type="PackedScene" uid="uid://cno3m80v8dsjl" path="res://scenes/missions/mission2/h_terrain.tscn" id="4_terrain"]
+[ext_resource type="Script" path="res://scripts/mission3_manager.gd" id="5_manager"]
+[ext_resource type="Script" path="res://scripts/mission2_resources.gd" id="6_resources"]
+
+[sub_resource type="BoxShape3D" id="BoxShape_player"]
+
+[sub_resource type="BoxShape3D" id="BoxShape_base"]
+size = Vector3(10, 6, 10)
+
+[sub_resource type="SphereShape3D" id="SphereShape_cmdzone"]
+radius = 13.0
+
+[sub_resource type="BoxShape3D" id="BoxShape_floor"]
+size = Vector3(8, 0.2, 8)
+
+[node name="Main" instance=ExtResource("1_gameroot")]
+
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0.5, 0)
+collision_layer = 2
+collision_mask = 289
+script = ExtResource("2_player")
+
+[node name="AvatarRoot" type="Node3D" parent="Player"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("BoxShape_player")
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
+collision_mask = 289
+spring_length = 9.0
+margin = 0.08
+
+[node name="Camera3D" type="Camera3D" parent="Player/SpringArm3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+current = true
+fov = 70.0
+
+[node name="Base" type="StaticBody3D" parent="."]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 0, 3, 0)
+
+[node name="FortressVisual" type="Node3D" parent="Base"]
+script = ExtResource("3_fortress")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Base"]
+shape = SubResource("BoxShape_base")
+
+[node name="InteriorFloor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteriorFloor"]
+shape = SubResource("BoxShape_floor")
+
+[node name="InteriorSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)
+
+[node name="EnemySpawn" type="Marker3D" parent="." groups=["enemy_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.55, 132)
+
+[node name="ExteriorSpawn" type="Marker3D" parent="." groups=["player_spawn_zone"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0.5, 0)
+
+[node name="PlayerSpawnZoneVisual" type="Node3D" parent="ExteriorSpawn"]
+visible = false
+
+[node name="WorkerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.55, 9.5)
+
+[node name="OreDeposit" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.5, 0.55, 0)
+
+[node name="BaseCommandZone" type="Area3D" parent="."]
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BaseCommandZone"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+shape = SubResource("SphereShape_cmdzone")
+
+[node name="CommanderCameraRig" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CommanderCameraRig"]
+transform = Transform3D(1, 0, 0, 0, 0.766044, 0.642788, 0, -0.642788, 0.766044, 0, 28, 18)
+fov = 52.0
+far = 420.0
+
+[node name="Terrain" parent="." instance=ExtResource("4_terrain")]
+
+[node name="Mission3Manager" type="Node3D" parent="."]
+script = ExtResource("5_manager")
+
+[node name="Mission2Resources" type="Node3D" parent="."]
+script = ExtResource("6_resources")

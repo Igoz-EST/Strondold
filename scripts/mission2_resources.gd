@@ -25,7 +25,7 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
-	if GameState.game_mode != GameState.GAME_MODE_MISSION_2:
+	if not GameState.is_terrain_mission():
 		return
 	_build_segs()
 	call_deferred(&"_spawn_resources")

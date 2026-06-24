@@ -55,16 +55,17 @@ func _ready() -> void:
 
 
 func _init_hold_pos() -> void:
-	if GameState.game_mode != GameState.GAME_MODE_MISSION_2:
+	if not GameState.is_terrain_mission():
 		return
 	var path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
 	if path == null:
-		push_warning("GiantWarrior M2: m2_enemy_path not found")
+		push_warning("GiantWarrior: m2_enemy_path not found")
 		return
 	_gw_path          = path
 	var curve          := path.curve
 	_gw_path_progress  = curve.get_baked_length()   # start at Base end of path
-	_gw_hold_progress  = 30.0                        # hold 30 u from EnemySpawn end
+	# Defense (M2): hold 30 u from the enemy end. Assault (M3): push to the base.
+	_gw_hold_progress  = 3.0 if GameState.is_base_assault() else 30.0
 	# Compute world hold position for _do_combat fallback
 	var hold_local     := curve.sample_baked(_gw_hold_progress, true)
 	_hold_pos          = path.to_global(hold_local)
@@ -212,12 +213,40 @@ func _do_march_direct() -> void:
 	_gw_play(_GW_ANIM_WALK)
 
 
-func _do_hold(_delta: float) -> void:
+func _do_hold(delta: float) -> void:
 	velocity.x = 0.0; velocity.z = 0.0
 	if _pick_enemy() != null:
 		_gw_state = GWState.COMBAT
 		return
+	if _assault_base(delta):  # Mission 3: push into and smash the enemy base
+		return
 	_gw_play(_GW_ANIM_IDLE)
+
+
+## Walk to the enemy base and attack it. Returns false when not in assault mode.
+func _assault_base(delta: float) -> bool:
+	var base := _enemy_base_target()
+	if base == null:
+		return false
+	var bp := base.global_position
+	var to := bp - global_position
+	to.y = 0.0
+	if to.length() > _MELEE_RANGE + BASE_REACH:
+		var dir := to.normalized()
+		velocity.x = dir.x * MOVE_SPEED
+		velocity.z = dir.z * MOVE_SPEED
+		look_at(global_position + dir, Vector3.UP)
+		_gw_play(_GW_ANIM_WALK)
+	else:
+		velocity.x = 0.0; velocity.z = 0.0
+		look_at(Vector3(bp.x, global_position.y, bp.z), Vector3.UP)
+		_attack_cd -= delta
+		if _attack_cd <= 0.0 and base.has_method(&"apply_sword_hit"):
+			_attack_cd = attack_interval
+			SoundManager.play_sfx(&"sword_attack", global_position, -2.0)
+			base.call(&"apply_sword_hit", melee_damage, self)
+			_gw_play(_GW_ANIM_ATTACK, false)
+	return true
 
 
 func _do_combat(delta: float) -> void:

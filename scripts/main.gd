@@ -161,6 +161,7 @@ var _dev_unbreak_btn:   Button
 var _money_cmd_regex: RegEx
 
 var _wave_countdown_label: Label
+var _enemy_base_label: Label  # Mission 3 only
 
 var _game_over_layer: CanvasLayer
 var _restart_button: Button
@@ -197,6 +198,8 @@ func _ready() -> void:
 	_setup_victory_ui()
 	_setup_pause_menu()
 	GameState.base_destroyed.connect(_on_base_destroyed)
+	GameState.enemy_base_destroyed.connect(_on_enemy_base_destroyed)
+	GameState.enemy_base_hp_changed.connect(_on_enemy_base_hp_changed)
 	GameState.pause_menu_toggle_requested.connect(_on_pause_menu_toggle_requested)
 	var hp_world := Node3D.new()
 	hp_world.set_script(_BaseWorldHpScript)
@@ -226,7 +229,7 @@ func _ready() -> void:
 	_refresh_ore_labels()
 	_on_base_hp_changed(GameState.base_hp, GameState.BASE_MAX_HP)
 	_setup_wave_timer_ui()
-	if GameState.game_mode != GameState.GAME_MODE_MISSION_2:
+	if not GameState.is_terrain_mission():
 		call_deferred(&"_spawn_secret_chest_random")
 	if GameState.has_giant_warrior:
 		call_deferred(&"_spawn_saved_giant_warrior")
@@ -236,7 +239,7 @@ func _spawn_saved_giant_warrior() -> void:
 	var gw := _WarriorScene.instantiate() as CharacterBody3D
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+	if GameState.is_terrain_mission():
 		_gw_place_m2(gw)
 	else:
 		gw.global_position = Vector3(7.0, 0.55, 22.0)
@@ -344,7 +347,7 @@ func _setup_hud_style() -> void:
 
 
 func _randomize_map_resources() -> void:
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+	if GameState.is_terrain_mission():
 		return
 	_remove_scene_resource_placeholders()
 	var occupied: Array = []
@@ -488,16 +491,48 @@ func _setup_wave_timer_ui() -> void:
 	_wave_countdown_label.focus_mode = Control.FOCUS_NONE
 	cl.add_child(_wave_countdown_label)
 
+	# Mission 3 — no waves; show enemy base HP + mission timer instead.
+	if GameState.is_base_assault():
+		_enemy_base_label = Label.new()
+		_enemy_base_label.name = "EnemyBaseLabel"
+		_enemy_base_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		_enemy_base_label.offset_left = -440.0
+		_enemy_base_label.offset_top = 48.0
+		_enemy_base_label.offset_right = -20.0
+		_enemy_base_label.offset_bottom = 84.0
+		_enemy_base_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_enemy_base_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_enemy_base_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_enemy_base_label.focus_mode = Control.FOCUS_NONE
+		UiStyle.style_label(_enemy_base_label, Color(1.0, 0.5, 0.45), 20, 5)
+		cl.add_child(_enemy_base_label)
+		_on_enemy_base_hp_changed(GameState.enemy_base_hp, GameState.enemy_base_max)
+
 	_update_wave_countdown_label()
 
 
 func _update_wave_countdown_label() -> void:
 	if _wave_countdown_label == null:
 		return
+	if GameState.is_base_assault():
+		# Reuse the top-right slot for a mission timer; base HP shown below it.
+		var t := int(GameState.mission_time)
+		_wave_countdown_label.text = "Assault — %d:%02d" % [t / 60, t % 60]
+		return
 	var wm: Node = get_node_or_null("WaveManager")
 	if wm == null or not wm.has_method(&"get_wave_timer_hud_text"):
 		return
 	_wave_countdown_label.text = wm.call(&"get_wave_timer_hud_text") as String
+
+
+func _on_enemy_base_hp_changed(current: int, maximum: int) -> void:
+	if _enemy_base_label == null:
+		return
+	_enemy_base_label.text = "Enemy Base: %d / %d" % [current, maximum]
+
+
+func _on_enemy_base_destroyed() -> void:
+	_show_victory_screen()
 
 
 func _spawn_worker(role: String = "miner") -> void:
@@ -926,7 +961,7 @@ func _do_spawn_entry(entry: Dictionary) -> void:
 			k.set_script(_AttackKnightScript)
 			GameState.register_population_unit(k)
 			add_child(k)
-			if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+			if GameState.is_terrain_mission():
 				_gw_place_m2(k)
 			else:
 				k.global_position = Vector3(7.0, 0.55, 22.0)
@@ -935,7 +970,7 @@ func _do_spawn_entry(entry: Dictionary) -> void:
 			gw.set_script(_AttackGiantScript)
 			GameState.register_population_unit(gw)
 			add_child(gw)
-			if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+			if GameState.is_terrain_mission():
 				_gw_place_m2(gw)
 			else:
 				gw.global_position = Vector3(7.0, 0.55, 22.0)
@@ -1159,6 +1194,9 @@ func _on_base_destroyed() -> void:
 func _try_show_victory() -> void:
 	if _victory_shown or GameState.game_over:
 		return
+	# Mission 3 wins by destroying the enemy base (signal-driven), not by waves.
+	if GameState.is_base_assault():
+		return
 	if _win_layer == null:
 		return
 	var wm: Node = get_node_or_null("WaveManager")
@@ -1167,6 +1205,16 @@ func _try_show_victory() -> void:
 	if not (wm.call(&"all_waves_spawned") as bool):
 		return
 	if get_tree().get_nodes_in_group(&"enemy").size() > 0:
+		return
+	_show_victory_screen()
+
+
+## Shows the victory layer (shared by wave-survival completion and Mission 3
+## enemy-base destruction).
+func _show_victory_screen() -> void:
+	if _victory_shown or GameState.game_over:
+		return
+	if _win_layer == null:
 		return
 	_victory_shown = true
 	close_pause_menu()
@@ -1625,7 +1673,7 @@ func _dev_get_spawn_pos() -> Vector3:
 		var x    := sp.global_position.x + xoff
 		var z    := sp.global_position.z + zoff
 		var y    := sp.global_position.y
-		if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+		if GameState.is_terrain_mission():
 			y = _m2_terrain_y(x, z) + 0.55
 		return Vector3(x, y, z)
 	return Vector3(10.0, 0.55, 50.0)
@@ -1651,7 +1699,7 @@ func _dev_spawn_giant_warrior() -> void:
 	var gw := _WarriorScene.instantiate() as CharacterBody3D
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+	if GameState.is_terrain_mission():
 		_gw_place_m2(gw)
 	else:
 		gw.global_position = Vector3(7.0, 0.55, 22.0)
@@ -1924,7 +1972,7 @@ func _casino_spawn_free_knight() -> void:
 	var k := _WarriorScene.instantiate() as CharacterBody3D
 	k.set_script(_AttackKnightScript)
 	add_child(k)
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+	if GameState.is_terrain_mission():
 		_gw_place_m2(k)
 	else:
 		k.global_position = Vector3(7.0, 0.55, 22.0)
@@ -1944,7 +1992,7 @@ func _casino_try_spawn_giant() -> void:
 	var gw := _WarriorScene.instantiate() as CharacterBody3D
 	gw.set_script(_GiantWarriorScript)
 	add_child(gw)
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+	if GameState.is_terrain_mission():
 		_gw_place_m2(gw)
 	else:
 		gw.global_position = Vector3(7.0, 0.55, 22.0)

@@ -50,9 +50,13 @@ const TOWER_MAGIC_ORE_COSTS:  Array[int] = [0, 400, 800]
 const MARKET_UPGRADE_COIN_COSTS: Array[int] = [0, 40, 60]
 const MARKET_UPGRADE_WOOD_COSTS: Array[int] = [0, 100, 200]
 const MARKET_UPGRADE_ORE_COSTS:  Array[int] = [0, 100, 200]
-const GAME_MODE_MISSION   := 0
-const GAME_MODE_ENDLESS   := 1
-const GAME_MODE_MISSION_2 := 2
+const GAME_MODE_MISSION   := 0   # MISSION_SURVIVAL — defend, survive all waves
+const GAME_MODE_ENDLESS   := 1   # MISSION_SURVIVAL endless variant
+const GAME_MODE_MISSION_2 := 2   # MISSION_PATH — survive waves on the HTerrain path map
+const GAME_MODE_MISSION_3 := 3   # MISSION_BASE_ASSAULT — destroy the enemy base
+
+## Both bases passively regenerate this many HP per minute (capped at max).
+const BASE_REGEN_PER_MIN := 100.0
 
 const BASE_MAX_HP := 1000
 ## Горизонтальный радиус вокруг маркера группы `player_spawn_zone`, где нельзя ставить башни/бараки.
@@ -78,6 +82,14 @@ var awaiting_build_type: int = BUILD_NONE
 var base_hp: int = BASE_MAX_HP
 var game_over: bool = false
 var game_mode: int = GAME_MODE_MISSION
+
+# ── Mission 3 (base assault) state ────────────────────────────────────────────
+var enemy_base_max: int = BASE_MAX_HP
+var enemy_base_hp:  int = BASE_MAX_HP
+var enemy_base_down: bool = false
+var mission_time: float = 0.0
+var _player_regen_acc: float = 0.0
+var _enemy_regen_acc:  float = 0.0
 var has_giant_warrior: bool = false
 var infinite_resources: bool = false
 var unbreakable_base:   bool = false
@@ -101,6 +113,8 @@ signal pause_menu_toggle_requested
 signal building_selected(building: Node3D)
 signal flag_placement_changed
 signal market_building_changed
+signal enemy_base_hp_changed(current: int, maximum: int)
+signal enemy_base_destroyed
 
 
 func request_pause_menu_toggle() -> void:
@@ -113,6 +127,59 @@ func set_game_mode(mode: int) -> void:
 
 func get_map_scale() -> float:
 	return 2.0 if game_mode == GAME_MODE_ENDLESS else 1.0
+
+
+## HTerrain + designer Path3D missions (share enemy path / terrain placement).
+func is_terrain_mission() -> bool:
+	return game_mode == GAME_MODE_MISSION_2 or game_mode == GAME_MODE_MISSION_3
+
+
+## Base-assault mode: win by destroying the enemy base, no waves.
+func is_base_assault() -> bool:
+	return game_mode == GAME_MODE_MISSION_3
+
+
+# ── Passive base regen + mission timer (Mission 3 only) ───────────────────────
+
+func _process(delta: float) -> void:
+	if game_mode != GAME_MODE_MISSION_3 or game_over:
+		return
+	mission_time += delta
+	var per_sec := BASE_REGEN_PER_MIN / 60.0
+	# Player base
+	if base_hp > 0 and base_hp < BASE_MAX_HP:
+		_player_regen_acc += per_sec * delta
+		if _player_regen_acc >= 1.0:
+			var add := int(_player_regen_acc)
+			_player_regen_acc -= float(add)
+			base_hp = mini(BASE_MAX_HP, base_hp + add)
+			base_hp_changed.emit(base_hp, BASE_MAX_HP)
+	# Enemy base
+	if not enemy_base_down and enemy_base_hp > 0 and enemy_base_hp < enemy_base_max:
+		_enemy_regen_acc += per_sec * delta
+		if _enemy_regen_acc >= 1.0:
+			var add2 := int(_enemy_regen_acc)
+			_enemy_regen_acc -= float(add2)
+			enemy_base_hp = mini(enemy_base_max, enemy_base_hp + add2)
+			enemy_base_hp_changed.emit(enemy_base_hp, enemy_base_max)
+
+
+func init_enemy_base() -> void:
+	enemy_base_max  = BASE_MAX_HP
+	enemy_base_hp   = BASE_MAX_HP
+	enemy_base_down = false
+	_enemy_regen_acc = 0.0
+	enemy_base_hp_changed.emit(enemy_base_hp, enemy_base_max)
+
+
+func damage_enemy_base(amount: int) -> void:
+	if enemy_base_down or amount <= 0 or enemy_base_hp <= 0:
+		return
+	enemy_base_hp = maxi(0, enemy_base_hp - amount)
+	enemy_base_hp_changed.emit(enemy_base_hp, enemy_base_max)
+	if enemy_base_hp <= 0:
+		enemy_base_down = true
+		enemy_base_destroyed.emit()
 
 
 func add_coin() -> void:
@@ -171,6 +238,12 @@ func reset_run() -> void:
 	has_market_building      = false
 	population               = 0
 	population_max           = BASE_POPULATION_MAX
+	enemy_base_max           = BASE_MAX_HP
+	enemy_base_hp            = BASE_MAX_HP
+	enemy_base_down          = false
+	mission_time             = 0.0
+	_player_regen_acc        = 0.0
+	_enemy_regen_acc         = 0.0
 	coins_changed.emit(coins)
 	ore_changed.emit(ore)
 	wood_changed.emit(wood)

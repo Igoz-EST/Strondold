@@ -19,6 +19,19 @@ var _wave_spawned: Array[bool] = [false, false, false, false, false, false]
 var _endless_wave := 0
 var _next_endless_wave_at := 300.0
 
+# ── Mission 3 base-assault progression (Age-of-War style) ─────────────────────
+const _BATPIG_EARLIEST := 480.0   # 8 min — player can have Skywatch by now
+const _DEMON_EARLIEST  := 360.0   # 6 min — player can have Magic Tower by now
+const _BOSS_EARLIEST   := 600.0   # 10 min
+const _BATPIG_COOLDOWN := 30.0
+const _BOSS_COOLDOWN    := 45.0
+const _SQUAD_CAP        := 6       # hard cap on units per spawn tick
+const _STAT_MUL_CAP     := 2.0     # hard cap on enemy stat scaling
+const _INTERVAL_FLOOR   := 3.5     # hard cap on spawn frequency
+var _assault_cd     := 2.0         # short delay before the first squad
+var _last_boss_t    := -999.0
+var _last_batpig_t  := -999.0
+
 
 func _ready() -> void:
 	add_to_group(&"wave_manager")
@@ -26,6 +39,11 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
+	# Mission 3 — no waves; the enemy base streams units with rising pressure.
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_3:
+		if not GameState.game_over and not GameState.enemy_base_down:
+			_process_assault(delta)
+		return
 	if GameState.game_mode == GameState.GAME_MODE_ENDLESS:
 		if _elapsed >= _next_endless_wave_at:
 			_spawn_endless_wave()
@@ -57,6 +75,82 @@ func spawn_extra(normal_n: int) -> void:
 		return
 	for i: int in normal_n:
 		_spawn_one(world, KIND_NORMAL, i * 0.02)
+
+
+# ── Mission 3 assault ─────────────────────────────────────────────────────────
+
+func _process_assault(delta: float) -> void:
+	var world := get_parent()
+	if world == null:
+		return
+	_assault_cd -= delta
+	if _assault_cd > 0.0:
+		return
+	_assault_cd = _assault_interval()
+	var stat_mul := clampf(1.0 + (_elapsed / 60.0) * 0.07, 1.0, _STAT_MUL_CAP)
+	var squad := _build_assault_squad()
+	for i: int in squad.size():
+		_spawn_one(world, squad[i], 0.0, stat_mul, 1.0)
+
+
+## Spawn frequency rises over time, with a hard floor.
+func _assault_interval() -> float:
+	if _elapsed < 180.0:   return 6.0
+	elif _elapsed < 360.0: return 5.0
+	elif _elapsed < 600.0: return 4.5
+	elif _elapsed < 840.0: return 4.0
+	return _INTERVAL_FLOOR
+
+
+## Composition by time tier; size, variety and rare units grow, all capped.
+func _build_assault_squad() -> Array[int]:
+	var t := _elapsed
+	var squad: Array[int] = []
+	if t < 180.0:
+		# 0–3 min: Normal, rare Big
+		squad.append(KIND_NORMAL)
+		if randf() < 0.4: squad.append(KIND_NORMAL)
+		if randf() < 0.2: squad.append(KIND_BIG)
+	elif t < 360.0:
+		# 3–6 min: more Big, first Golem
+		squad.append(KIND_NORMAL); squad.append(KIND_NORMAL)
+		if randf() < 0.6: squad.append(KIND_BIG)
+		if randf() < 0.35: squad.append(KIND_GOLEM)
+	elif t < 600.0:
+		# 6–10 min: Golem stable, first Demon
+		squad.append(KIND_NORMAL); squad.append(KIND_NORMAL)
+		if randf() < 0.7: squad.append(KIND_BIG)
+		squad.append(KIND_GOLEM)
+		if t >= _DEMON_EARLIEST and randf() < 0.35: squad.append(KIND_DEMON)
+	elif t < 840.0:
+		# 10–14 min: Demon, rare Bat Pig, rare Boss
+		squad.append(KIND_NORMAL); squad.append(KIND_BIG)
+		if randf() < 0.8: squad.append(KIND_GOLEM)
+		if randf() < 0.6: squad.append(KIND_DEMON)
+		_maybe_batpig(squad, 0.35)
+		_maybe_boss(squad, 0.25)
+	else:
+		# 14+ min: max progression, mixed groups, Boss within its cooldown
+		squad.append(KIND_NORMAL); squad.append(KIND_BIG); squad.append(KIND_GOLEM)
+		if randf() < 0.7: squad.append(KIND_DEMON)
+		if randf() < 0.5: squad.append(KIND_BIG)
+		_maybe_batpig(squad, 0.4)
+		_maybe_boss(squad, 0.35)
+	if squad.size() > _SQUAD_CAP:
+		squad.resize(_SQUAD_CAP)
+	return squad
+
+
+func _maybe_batpig(squad: Array[int], chance: float) -> void:
+	if _elapsed >= _BATPIG_EARLIEST and (_elapsed - _last_batpig_t) >= _BATPIG_COOLDOWN and randf() < chance:
+		squad.append(KIND_BAT_PIG)
+		_last_batpig_t = _elapsed
+
+
+func _maybe_boss(squad: Array[int], chance: float) -> void:
+	if _elapsed >= _BOSS_EARLIEST and (_elapsed - _last_boss_t) >= _BOSS_COOLDOWN and randf() < chance:
+		squad.append(KIND_BOSS)
+		_last_boss_t = _elapsed
 
 
 func _spawn_wave_index(idx: int) -> void:
@@ -153,12 +247,12 @@ func _spawn_one(world: Node, kind: int, _angle_offset: float, stat_multiplier: f
 	var xoff     := randf_range(-2.0, 2.0)
 	var zoff     := randf_range(-2.0, 2.0)
 	var spawn_y  := base_pos.y
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
-		# In M2 the terrain is uneven; sample the surface height at the exact
-		# spawn XZ so enemies never appear inside or below the terrain.
+	if GameState.is_terrain_mission():
+		# On HTerrain the surface is uneven; sample the exact spawn XZ so enemies
+		# never appear inside or below the terrain.
 		spawn_y = _terrain_y_at(base_pos.x + xoff, base_pos.z + zoff) + 0.55
 	e.global_position = Vector3(base_pos.x + xoff, spawn_y, base_pos.z + zoff)
-	# Mission 2: assign EnemyPath so enemies follow the designer-placed path
+	# M2/M3: assign EnemyPath so enemies follow the designer-placed path
 	var path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
 	if path != null and e.has_method(&"assign_path"):
 		e.call(&"assign_path", path)
@@ -181,6 +275,8 @@ func _terrain_y_at(x: float, z: float) -> float:
 func all_waves_spawned() -> bool:
 	if GameState.game_mode == GameState.GAME_MODE_ENDLESS:
 		return false
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_3:
+		return false  # no waves — victory is the enemy base falling
 	for i: int in range(_wave_spawned.size()):
 		if not _wave_spawned[i]:
 			return false
@@ -206,6 +302,8 @@ func get_seconds_until_next_wave() -> float:
 
 
 func get_wave_timer_hud_text() -> String:
+	if GameState.game_mode == GameState.GAME_MODE_MISSION_3:
+		return ""  # Mission 3 has no waves; HUD shows base HP instead
 	var nxt := get_next_wave_index_1based()
 	if nxt == 0:
 		return "Waves: all sent"

@@ -134,6 +134,7 @@ func _build_mode_panel() -> void:
 	col.add_child(_spacer(8))
 	col.add_child(_make_button("Mission 1", _on_mission_1_pressed))
 	col.add_child(_make_button("Mission 2", _on_mission_2_pressed))
+	col.add_child(_make_button("Mission 3", _on_mission_3_pressed))
 	col.add_child(_make_button("Endless Game", _on_endless_game_pressed))
 	col.add_child(_make_button("Back to Main Menu", _show_main))
 
@@ -324,6 +325,10 @@ func _on_mission_1_pressed() -> void:
 
 func _on_mission_2_pressed() -> void:
 	_start_selected_game(GameState.GAME_MODE_MISSION_2)
+
+
+func _on_mission_3_pressed() -> void:
+	_start_selected_game(GameState.GAME_MODE_MISSION_3)
 
 
 func _on_endless_game_pressed() -> void:

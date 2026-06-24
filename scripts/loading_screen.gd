@@ -2,6 +2,7 @@ extends Control
 
 const MAIN_SCENE     := "res://scenes/missions/mission1.tscn"
 const MISSION2_SCENE := "res://scenes/missions/mission2/mission2.tscn"
+const MISSION3_SCENE := "res://scenes/missions/mission3/mission3.tscn"
 
 var _bar:          ProgressBar
 var _target_scene: String = MAIN_SCENE
@@ -10,9 +11,10 @@ var _target_scene: String = MAIN_SCENE
 func _ready() -> void:
 	process_mode  = Node.PROCESS_MODE_ALWAYS
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_target_scene = MISSION2_SCENE \
-		if GameState.game_mode == GameState.GAME_MODE_MISSION_2 \
-		else MAIN_SCENE
+	match GameState.game_mode:
+		GameState.GAME_MODE_MISSION_2: _target_scene = MISSION2_SCENE
+		GameState.GAME_MODE_MISSION_3: _target_scene = MISSION3_SCENE
+		_:                             _target_scene = MAIN_SCENE
 	_build_ui()
 	ResourceLoader.load_threaded_request(_target_scene)
 

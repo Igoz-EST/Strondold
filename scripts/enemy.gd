@@ -87,8 +87,8 @@ func _ready() -> void:
 	if kind == Kind.BOSS:
 		bar.position.y = 3.8
 	_load_model()
-	# In Mission 2 every enemy (including dev-console spawns) follows the designer path
-	if GameState.game_mode == GameState.GAME_MODE_MISSION_2:
+	# On HTerrain missions (M2/M3) every enemy follows the designer path
+	if GameState.is_terrain_mission():
 		var m2_path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
 		if m2_path != null:
 			assign_path(m2_path)

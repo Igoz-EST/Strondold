@@ -21,7 +21,7 @@ func _ready() -> void:
 
 
 func _init_path() -> void:
-	if GameState.game_mode != GameState.GAME_MODE_MISSION_2:
+	if not GameState.is_terrain_mission():
 		return
 	var path := get_tree().get_first_node_in_group(&"m2_enemy_path") as Path3D
 	if path == null:
@@ -77,12 +77,36 @@ func _do_march_direct() -> void:
 	_walk_toward(target)
 
 
-func _do_idle(_delta: float) -> void:
+func _do_idle(delta: float) -> void:
 	velocity.x = 0.0; velocity.z = 0.0
 	if _pick_enemy() != null:
 		_ak_state = AKState.COMBAT
 		return
+	if _assault_base(delta):  # Mission 3: smash the enemy base
+		return
 	_w_play(_W_ANIM_IDLE)
+
+
+## Walk to the enemy base and attack it. Returns false when not in assault mode.
+func _assault_base(delta: float) -> bool:
+	var base := _enemy_base_target()
+	if base == null:
+		return false
+	var bp := base.global_position
+	var to := bp - global_position
+	to.y = 0.0
+	if to.length() > ATTACK_RANGE + BASE_REACH:
+		_walk_toward(bp)
+	else:
+		velocity.x = 0.0; velocity.z = 0.0
+		look_at(Vector3(bp.x, global_position.y, bp.z), Vector3.UP)
+		_attack_cd -= delta
+		if _attack_cd <= 0.0 and base.has_method(&"apply_sword_hit"):
+			_attack_cd = attack_interval
+			SoundManager.play_sfx(&"sword_attack", global_position, -4.0)
+			base.call(&"apply_sword_hit", melee_damage, self)
+			_w_play(_W_ANIM_ATTACK, false)
+	return true
 
 
 func _do_combat(delta: float) -> void:
