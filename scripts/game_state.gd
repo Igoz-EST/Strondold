@@ -496,12 +496,15 @@ func _apply_level_to_group(group_name: StringName, level: int) -> void:
 			n.call(&"apply_upgrade_level", level)
 
 
-func set_commander_mode(active: bool) -> void:
+## play_sound=false — для стартового входа в базу (игрок уже там, двери не нужны).
+func set_commander_mode(active: bool, play_sound: bool = true) -> void:
 	commander_active = active
 	if active:
-		SoundManager.play_ui(&"commander_enter")
+		if play_sound:
+			SoundManager.play_ui(&"commander_enter")
 	else:
-		SoundManager.play_ui(&"commander_exit")
+		if play_sound:
+			SoundManager.play_ui(&"commander_exit")
 		awaiting_build_type = BUILD_NONE
 		pending_build_changed.emit(false)
 	commander_mode_changed.emit(active)

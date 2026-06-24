@@ -129,7 +129,7 @@ func _ready() -> void:
 
 func _start_game_in_commander() -> void:
 	get_viewport().gui_release_focus()
-	_enter_commander_mode()
+	_enter_commander_mode(false)  # игрок уже в базе — без звука дверей
 
 
 func _setup_commander_enter_hint() -> void:
@@ -864,9 +864,9 @@ func _tint_preview_node(node: Node, color: Color) -> void:
 		_tint_preview_node(child, color)
 
 
-func _enter_commander_mode() -> void:
+func _enter_commander_mode(play_sound: bool = true) -> void:
 	_inside_base = true
-	GameState.set_commander_mode(true)
+	GameState.set_commander_mode(true, play_sound)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_spawn_zone_visual.visible = true
 	_base_collision.disabled = true
