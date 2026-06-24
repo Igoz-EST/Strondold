@@ -10,6 +10,7 @@ const _WorldBuilderScript := preload("res://scripts/world_builder.gd")
 const _WarriorScene       := preload("res://scenes/warrior.tscn")
 const _GiantWarriorScript := preload("res://scripts/giant_warrior.gd")
 const _AttackKnightScript := preload("res://scripts/attack_knight.gd")
+const _AttackBigKnightScript := preload("res://scripts/attack_big_knight.gd")
 const _AttackGiantScript  := preload("res://scripts/attack_giant_warrior.gd")
 const _EnemyScene         := preload("res://scenes/enemy.tscn")
 
@@ -122,6 +123,7 @@ var _market_building_button: Button
 var _house_button: Button
 var _pop_label: Label
 var _attack_knight_button: Button
+var _attack_big_knight_button: Button
 var _attack_giant_button: Button
 var _dmg_upgrade_button: Button
 var _market_tab_idx: int = -1
@@ -139,8 +141,8 @@ var _buy_worker_button: Button
 var _buy_woodcutter_button: Button
 var _worker_timer_label: Label
 
-const _SPAWN_ICONS: Dictionary = {"miner": "⛏", "woodcutter": "🌲", "knight": "⚔", "giant": "🛡"}
-const _SPAWN_TIMES: Dictionary = {"miner": 5.0, "woodcutter": 5.0, "knight": 3.0, "giant": 30.0}
+const _SPAWN_ICONS: Dictionary = {"miner": "⛏", "woodcutter": "🌲", "knight": "⚔", "big_knight": "🗡", "giant": "🛡"}
+const _SPAWN_TIMES: Dictionary = {"miner": 5.0, "woodcutter": 5.0, "knight": 1.0, "big_knight": 2.0, "giant": 20.0}
 
 var _spawn_queue: Array = []
 var _spawn_timer_left: float = 0.0
@@ -692,6 +694,16 @@ func _setup_commander_build_ui() -> void:
 	_attack_knight_button.pressed.connect(_on_attack_knight_button_pressed)
 	row_attack.add_child(_attack_knight_button)
 
+	_attack_big_knight_button = Button.new()
+	_attack_big_knight_button.focus_mode = Control.FOCUS_NONE
+	_attack_big_knight_button.custom_minimum_size = Vector2(118, 96)
+	_attack_big_knight_button.text = "BIG KNIGHT\n🗡\n%d coins" % GameState.ATTACK_BIG_KNIGHT_COIN_COST
+	_attack_big_knight_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.style_button(_attack_big_knight_button, 13)
+	_attack_big_knight_button.tooltip_text = "A larger, tougher Knight (more HP and damage). Marches down the path and crushes what it meets."
+	_attack_big_knight_button.pressed.connect(_on_attack_big_knight_button_pressed)
+	row_attack.add_child(_attack_big_knight_button)
+
 	_attack_giant_button = Button.new()
 	_attack_giant_button.focus_mode = Control.FOCUS_NONE
 	_attack_giant_button.custom_minimum_size = Vector2(118, 96)
@@ -834,6 +846,10 @@ func _on_attack_knight_button_pressed() -> void:
 	_enqueue_spawn("knight", GameState.ATTACK_KNIGHT_COIN_COST)
 
 
+func _on_attack_big_knight_button_pressed() -> void:
+	_enqueue_spawn("big_knight", GameState.ATTACK_BIG_KNIGHT_COIN_COST)
+
+
 func _on_attack_giant_button_pressed() -> void:
 	_enqueue_spawn("giant", GameState.ATTACK_GIANT_COIN_COST)
 
@@ -905,13 +921,15 @@ func _refresh_workers_ui() -> void:
 
 
 func _enqueue_spawn(type: String, cost: int) -> void:
-	# Все прямые покупки NPC занимают слот населения ещё в очереди
-	if not GameState.reserve_population():
+	# Только рабочие занимают слот населения; attack-юниты больше не ограничены.
+	var needs_pop := type == "miner" or type == "woodcutter"
+	if needs_pop and not GameState.reserve_population():
 		return
 	if not GameState.spend_coins(cost):
-		GameState.release_population()
+		if needs_pop:
+			GameState.release_population()
 		return
-	_spawn_queue.append({"type": type, "cost": cost, "time": _SPAWN_TIMES.get(type, 5.0), "icon": _SPAWN_ICONS.get(type, "?")})
+	_spawn_queue.append({"type": type, "cost": cost, "time": _SPAWN_TIMES.get(type, 5.0), "icon": _SPAWN_ICONS.get(type, "?"), "pop": needs_pop})
 	if _spawn_queue.size() == 1:
 		_spawn_timer_left = float(_spawn_queue[0].get("time", 5.0))
 	_refresh_workers_ui()
@@ -923,7 +941,8 @@ func _cancel_queue_entry(idx: int) -> void:
 		return
 	var entry: Dictionary = _spawn_queue[idx]
 	GameState.add_coins(int(entry.get("cost", 0)))
-	GameState.release_population()
+	if bool(entry.get("pop", false)):
+		GameState.release_population()
 	_spawn_queue.remove_at(idx)
 	if idx == 0:
 		_spawn_timer_left = float(_spawn_queue[0].get("time", 5.0)) if not _spawn_queue.is_empty() else 0.0
@@ -959,16 +978,22 @@ func _do_spawn_entry(entry: Dictionary) -> void:
 		"knight":
 			var k := _WarriorScene.instantiate() as CharacterBody3D
 			k.set_script(_AttackKnightScript)
-			GameState.register_population_unit(k)
 			add_child(k)
 			if GameState.is_terrain_mission():
 				_gw_place_m2(k)
 			else:
 				k.global_position = Vector3(7.0, 0.55, 22.0)
+		"big_knight":
+			var bk := _WarriorScene.instantiate() as CharacterBody3D
+			bk.set_script(_AttackBigKnightScript)
+			add_child(bk)
+			if GameState.is_terrain_mission():
+				_gw_place_m2(bk)
+			else:
+				bk.global_position = Vector3(7.0, 0.55, 22.0)
 		"giant":
 			var gw := _WarriorScene.instantiate() as CharacterBody3D
 			gw.set_script(_AttackGiantScript)
-			GameState.register_population_unit(gw)
 			add_child(gw)
 			if GameState.is_terrain_mission():
 				_gw_place_m2(gw)
@@ -1042,11 +1067,13 @@ func _on_population_changed(current: int, maximum: int) -> void:
 
 
 func _refresh_attack_buttons() -> void:
-	var room := GameState.has_population_room()
+	# Attack units are not limited by population — gate on coins only.
 	if _attack_knight_button:
-		_attack_knight_button.disabled = GameState.coins < GameState.ATTACK_KNIGHT_COIN_COST or not room
+		_attack_knight_button.disabled = GameState.coins < GameState.ATTACK_KNIGHT_COIN_COST
+	if _attack_big_knight_button:
+		_attack_big_knight_button.disabled = GameState.coins < GameState.ATTACK_BIG_KNIGHT_COIN_COST
 	if _attack_giant_button:
-		_attack_giant_button.disabled = GameState.coins < GameState.ATTACK_GIANT_COIN_COST or not room
+		_attack_giant_button.disabled = GameState.coins < GameState.ATTACK_GIANT_COIN_COST
 
 
 func _on_base_hp_changed(current: int, maximum: int) -> void:
