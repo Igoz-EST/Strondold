@@ -25,9 +25,10 @@ const _DEMON_EARLIEST  := 360.0   # 6 min — player can have Magic Tower by now
 const _BOSS_EARLIEST   := 600.0   # 10 min
 const _BATPIG_COOLDOWN := 30.0
 const _BOSS_COOLDOWN    := 45.0
-const _SQUAD_CAP        := 6       # hard cap on units per spawn tick
+const _SQUAD_CAP        := 3       # hard cap on units per spawn tick (halved count)
 const _STAT_MUL_CAP     := 2.0     # hard cap on enemy stat scaling
 const _INTERVAL_FLOOR   := 3.5     # hard cap on spawn frequency
+const _MAX_ALIVE        := 24      # hard cap on enemies alive at once (fewer NPC, less lag)
 var _assault_cd     := 2.0         # short delay before the first squad
 var _last_boss_t    := -999.0
 var _last_batpig_t  := -999.0
@@ -86,6 +87,10 @@ func _process_assault(delta: float) -> void:
 	_assault_cd -= delta
 	if _assault_cd > 0.0:
 		return
+	# Hard cap on living enemies — keeps the map readable and avoids lag.
+	if get_tree().get_nodes_in_group(&"enemy").size() >= _MAX_ALIVE:
+		_assault_cd = 1.0  # retry shortly once some have died
+		return
 	_assault_cd = _assault_interval()
 	var stat_mul := clampf(1.0 + (_elapsed / 60.0) * 0.07, 1.0, _STAT_MUL_CAP)
 	var squad := _build_assault_squad()
@@ -104,36 +109,36 @@ func _assault_interval() -> float:
 
 ## Composition by time tier; size, variety and rare units grow, all capped.
 func _build_assault_squad() -> Array[int]:
+	# Squads are intentionally small (~half the previous counts): enemy HP was
+	# globally doubled, so fewer-but-tankier units keep the threat while cutting
+	# the on-map NPC count and lag.
 	var t := _elapsed
 	var squad: Array[int] = []
 	if t < 180.0:
 		# 0–3 min: Normal, rare Big
 		squad.append(KIND_NORMAL)
-		if randf() < 0.4: squad.append(KIND_NORMAL)
 		if randf() < 0.2: squad.append(KIND_BIG)
 	elif t < 360.0:
 		# 3–6 min: more Big, first Golem
-		squad.append(KIND_NORMAL); squad.append(KIND_NORMAL)
-		if randf() < 0.6: squad.append(KIND_BIG)
-		if randf() < 0.35: squad.append(KIND_GOLEM)
+		squad.append(KIND_NORMAL)
+		if randf() < 0.5: squad.append(KIND_BIG)
+		if randf() < 0.25: squad.append(KIND_GOLEM)
 	elif t < 600.0:
 		# 6–10 min: Golem stable, first Demon
-		squad.append(KIND_NORMAL); squad.append(KIND_NORMAL)
-		if randf() < 0.7: squad.append(KIND_BIG)
-		squad.append(KIND_GOLEM)
-		if t >= _DEMON_EARLIEST and randf() < 0.35: squad.append(KIND_DEMON)
+		squad.append(KIND_NORMAL)
+		if randf() < 0.5: squad.append(KIND_GOLEM)
+		if t >= _DEMON_EARLIEST and randf() < 0.3: squad.append(KIND_DEMON)
 	elif t < 840.0:
 		# 10–14 min: Demon, rare Bat Pig, rare Boss
-		squad.append(KIND_NORMAL); squad.append(KIND_BIG)
-		if randf() < 0.8: squad.append(KIND_GOLEM)
-		if randf() < 0.6: squad.append(KIND_DEMON)
+		squad.append(KIND_BIG)
+		if randf() < 0.6: squad.append(KIND_GOLEM)
+		if randf() < 0.4: squad.append(KIND_DEMON)
 		_maybe_batpig(squad, 0.35)
 		_maybe_boss(squad, 0.25)
 	else:
 		# 14+ min: max progression, mixed groups, Boss within its cooldown
-		squad.append(KIND_NORMAL); squad.append(KIND_BIG); squad.append(KIND_GOLEM)
-		if randf() < 0.7: squad.append(KIND_DEMON)
-		if randf() < 0.5: squad.append(KIND_BIG)
+		squad.append(KIND_NORMAL); squad.append(KIND_GOLEM)
+		if randf() < 0.5: squad.append(KIND_DEMON)
 		_maybe_batpig(squad, 0.4)
 		_maybe_boss(squad, 0.35)
 	if squad.size() > _SQUAD_CAP:

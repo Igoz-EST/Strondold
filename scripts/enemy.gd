@@ -104,12 +104,12 @@ func configure(kind_in: int, stat_multiplier: float = 1.0, size_multiplier: floa
 	magic_resistance    = 0.0
 	match kind:
 		Kind.NORMAL:
-			move_speed = 9.0;  damage_to_base = 10;  max_hp = 40
+			move_speed = 9.0;  damage_to_base = 10;  max_hp = 80
 		Kind.BIG:
-			move_speed = 4.5;  damage_to_base = 20;  max_hp = 80
+			move_speed = 4.5;  damage_to_base = 20;  max_hp = 160
 			scale = Vector3(2.0, 2.0, 2.0)
 		Kind.BOSS:
-			move_speed = 1.8; damage_to_base = 100; max_hp = 400
+			move_speed = 1.8; damage_to_base = 100; max_hp = 800
 			# No node scale — visual scale applied to _model only in _load_model()
 			# Resize collision to match Minotaur visual body (native model is large at 0.06 vis scale)
 			var col := get_node_or_null("CollisionShape3D") as CollisionShape3D
@@ -122,20 +122,20 @@ func configure(kind_in: int, stat_multiplier: float = 1.0, size_multiplier: floa
 		Kind.GOLEM:
 			move_speed          = 4.5
 			damage_to_base      = 10
-			max_hp              = 80
+			max_hp              = 160
 			physical_resistance = 0.20
 			magic_resistance    = 0.50
 			scale               = Vector3(2.0, 2.0, 2.0)
 		Kind.DEMON:
 			move_speed          = 9.9
 			damage_to_base      = 15
-			max_hp              = 60
+			max_hp              = 120
 			physical_resistance = 0.80
 			magic_resistance    = 0.25
 		Kind.BAT_PIG:
 			move_speed     = 8.0
 			damage_to_base = 8
-			max_hp         = 50
+			max_hp         = 100
 			is_flying      = true
 	if stat_multiplier != 1.0:
 		damage_to_base = maxi(1, int(round(float(damage_to_base) * stat_multiplier)))

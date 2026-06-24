@@ -22,7 +22,9 @@ const ATTACK_INTERVAL := 0.85
 const MELEE_DAMAGE := 10
 
 const MOVE_SPEED := 9.0
-const MAX_HP := 40
+## Doubled (was 40) to keep army balance after enemy HP was globally doubled.
+## Cascades to Barracks Warrior, Knight, and Giant Warrior (MAX_HP * 15).
+const MAX_HP := 80
 ## Extra reach toward the enemy base footprint (Mission 3 base assault).
 const BASE_REACH := 5.0
 
